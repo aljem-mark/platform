@@ -1329,6 +1329,10 @@
       "projectFolder": "plugins/team"
     },
     {
+      "packageName": "@hcengineering/team-assets",
+      "projectFolder": "plugins/team-assets"
+    },
+    {
       "packageName": "@hcengineering/team-resources",
       "projectFolder": "plugins/team-resources",
       "shouldPublish": false
