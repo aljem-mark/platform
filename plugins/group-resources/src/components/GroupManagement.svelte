@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { createQuery, getClient } from "@hcengineering/presentation"
+  import { createQuery, getClient, MessageBox } from "@hcengineering/presentation"
+  import { type Ref, type AccountUuid } from "@hcengineering/core"
   import { type Group } from "@hcengineering/group"
   import groupPlugin from "@hcengineering/group"
   import { showPopup, Header, Breadcrumb, Scroller, ModernButton, IconAdd, ButtonIcon, IconDelete } from "@hcengineering/ui"
   import CreateGroup from "./CreateGroup.svelte"
+  import GroupMembersPopup from "./GroupMembersPopup.svelte"
 
   let groups: Group[] = []
   let loading = true
@@ -21,6 +23,15 @@
 
   function handleEdit (group: Group): void {
     showPopup(CreateGroup, { group }, "top")
+  }
+
+  function handleMembers (group: Group): void {
+    showPopup(GroupMembersPopup, { members: group.members, groupName: group.name }, "top", (result: AccountUuid[] | undefined) => {
+      if (result != null) {
+        const client = getClient()
+        void client.update(group, { members: result })
+      }
+    })
   }
 
   function handleDelete (group: Group): void {
