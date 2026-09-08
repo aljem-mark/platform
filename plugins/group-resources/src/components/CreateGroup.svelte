@@ -1,8 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte"
   import core, { type AccountUuid } from "@hcengineering/core"
-  import { getClient } from "@hcengineering/presentation"
-  import Card, { EditBox } from "@hcengineering/ui"
+  import { getClient, Card } from "@hcengineering/presentation"
+  import { EditBox } from "@hcengineering/ui"
   import groupPlugin from "@hcengineering/group"
 
   const dispatch = createEventDispatcher()
