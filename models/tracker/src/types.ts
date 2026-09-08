@@ -56,7 +56,7 @@ import notification, { TCommonInboxNotification } from '@hcengineering/model-not
 import task, { TTask, TProject as TTaskProject } from '@hcengineering/model-task'
 import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
 import tags, { type TagElement } from '@hcengineering/tags'
-import teamPlugin, { type Team } from '@hcengineering/team'
+import groupPlugin, { type Group } from '@hcengineering/group'
 import time, { type ToDo } from '@hcengineering/time'
 import {
   type ProjectTargetPreference,
@@ -140,8 +140,8 @@ export class TProject extends TTaskProject implements Project {
   @Prop(TypeRef(contact.mixin.Employee), tracker.string.DefaultAssignee)
     defaultAssignee!: Ref<Employee>
 
-  @Prop(TypeRef(teamPlugin.class.Team), tracker.string.DefaultTeam)
-    defaultTeam?: Ref<Team>
+  @Prop(TypeRef(groupPlugin.class.Group), tracker.string.DefaultGroup)
+    defaultGroup?: Ref<Group>
 
   declare defaultTimeReportDay: TimeReportDayType
 
@@ -156,14 +156,14 @@ export class TProject extends TTaskProject implements Project {
  * @public
  */
 
-@Model(tracker.class.Team, core.class.Doc, DOMAIN_MODEL)
-@UX(tracker.string.Team, tracker.icon.Home, 'Team', 'name')
-export class TTeam extends TDoc implements Team {
-  @Prop(TypeString(), tracker.string.TeamName)
+@Model(tracker.class.Group, core.class.Doc, DOMAIN_MODEL)
+@UX(tracker.string.Group, tracker.icon.Home, 'Group', 'name')
+export class TGroup extends TDoc implements Group {
+  @Prop(TypeString(), tracker.string.GroupName)
   @Index(IndexKind.FullText)
     name!: string
 
-  @Prop(TypeString(), tracker.string.TeamDescription)
+  @Prop(TypeString(), tracker.string.GroupDescription)
   @Index(IndexKind.FullText)
     description!: string
 

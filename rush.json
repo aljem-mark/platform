@@ -1325,16 +1325,16 @@
       "projectFolder": "plugins/tags-resources"
     },
     {
-      "packageName": "@hcengineering/team",
-      "projectFolder": "plugins/team"
+      "packageName": "@hcengineering/group",
+      "projectFolder": "plugins/group"
     },
     {
-      "packageName": "@hcengineering/team-assets",
-      "projectFolder": "plugins/team-assets"
+      "packageName": "@hcengineering/group-assets",
+      "projectFolder": "plugins/group-assets"
     },
     {
-      "packageName": "@hcengineering/team-resources",
-      "projectFolder": "plugins/team-resources",
+      "packageName": "@hcengineering/group-resources",
+      "projectFolder": "plugins/group-resources",
       "shouldPublish": false
     },
     {

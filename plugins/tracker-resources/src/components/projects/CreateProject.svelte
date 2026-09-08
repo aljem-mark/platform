@@ -59,11 +59,11 @@
   import { onMount, createEventDispatcher } from 'svelte'
 
   import tracker from '../../plugin'
-  import teamPlugin, { type Team } from '@hcengineering/team'
+  import groupPlugin, { type Group } from '@hcengineering/group'
   import StatusSelector from '../issues/StatusSelector.svelte'
   import { workingDaysUpdate } from '../gantt/lib/working-days-editor'
   import WorkingDaysEditor from './WorkingDaysEditor.svelte'
-  import TeamBox from './TeamBox.svelte'
+  import GroupBox from './GroupBox.svelte'
   import { Loading } from '@hcengineering/ui'
 
   export let project: Project | undefined = undefined
@@ -81,9 +81,9 @@
   let color = project?.color ?? getColorNumberByText(name)
   let isColorSelected = false
   let defaultAssignee: Ref<Employee> | null | undefined = project?.defaultAssignee ?? null
-  let defaultTeam: Ref<Team> | undefined = project?.defaultTeam
-  let allTeams: Team[] = []
-  let teamLoading = true
+  let defaultGroup: Ref<Group> | undefined = project?.defaultGroup
+  let allGroups: Group[] = []
+  let groupLoading = true
   let members: AccountUuid[] =
     project?.members !== undefined ? hierarchy.clone(project.members) : [getCurrentAccount().uuid]
   let owners: AccountUuid[] =
@@ -95,9 +95,9 @@
   // untouched until save.
   onMount(async () => {
     try {
-      allTeams = await client.findAll(teamPlugin.class.Team, { archived: { $ne: true } })
+      allGroups = await client.findAll(groupPlugin.class.Group, { archived: { $ne: true } })
     } catch (e) { console.error(e) }
-    finally { teamLoading = false }
+    finally { groupLoading = false }
   })
 
   let workingDaysConfig: WorkingDaysConfig | undefined =
@@ -150,7 +150,7 @@
       identifier: identifier.toUpperCase(),
       sequence: 0,
       defaultAssignee: defaultAssignee ?? undefined,
-      defaultTeam: defaultTeam,
+      defaultGroup: defaultGroup,
       icon,
       color,
       defaultIssueStatus: defaultStatus ?? ('' as Ref<IssueStatus>),
@@ -190,8 +190,8 @@
     if (projectData.private !== project?.private) {
       update.private = projectData.private
     }
-    if (projectData.defaultTeam !== project?.defaultTeam) {
-      update.defaultTeam = projectData.defaultTeam
+    if (projectData.defaultGroup !== project?.defaultGroup) {
+      update.defaultGroup = projectData.defaultGroup
     }
     if (projectData.defaultAssignee !== project?.defaultAssignee) {
       update.defaultAssignee = projectData.defaultAssignee
@@ -534,19 +534,19 @@
     </div>
     <div class="antiGrid-row">
       <div class="antiGrid-row__header">
-        <Label label={tracker.string.DefaultTeam} />
+        <Label label={tracker.string.DefaultGroup} />
       </div>
-      {#if teamLoading}
+      {#if groupLoading}
         <Loading />
       {:else}
-        <TeamBox
-          label={tracker.string.DefaultTeam}
-          placeholder={tracker.string.DefaultTeam}
+        <GroupBox
+          label={tracker.string.DefaultGroup}
+          placeholder={tracker.string.DefaultGroup}
           kind={'regular'}
           size={'large'}
-          bind:value={defaultTeam}
-          teams={allTeams}
-          showTooltip={{ label: tracker.string.DefaultTeam }}
+          bind:value={defaultGroup}
+          groups={allGroups}
+          showTooltip={{ label: tracker.string.DefaultGroup }}
         />
       {/if}
     </div>

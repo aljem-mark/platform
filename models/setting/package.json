@@ -50,6 +50,6 @@
     "@hcengineering/templates": "workspace:^0.7.0",
     "@hcengineering/activity": "workspace:^0.7.0",
     "@hcengineering/export": "workspace:^0.7.0",
-    "@hcengineering/team": "workspace:^0.7.0"
+    "@hcengineering/group": "workspace:^0.7.0"
   }
 }

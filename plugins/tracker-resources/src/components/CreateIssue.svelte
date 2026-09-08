@@ -85,7 +85,7 @@
 
   import { activeComponent, activeMilestone, generateIssueShortLink, updateIssueRelation } from '../issues'
   import tracker from '../plugin'
-  import teamPlugin, { type Team } from '@hcengineering/team'
+  import groupPlugin, { type Group } from '@hcengineering/group'
   import SetParentIssueActionPopup from './SetParentIssueActionPopup.svelte'
   import SubIssues from './SubIssues.svelte'
   import ComponentSelector from './components/ComponentSelector.svelte'
@@ -234,12 +234,12 @@
   fillDefaults(hierarchy, object, tracker.class.Issue)
 
   let currentProject: Project | undefined
-  let currentTeam: Team | undefined
+  let currentGroup: Group | undefined
   $: {
-    if (currentProject?.defaultTeam != null) {
-      client.findOne(teamPlugin.class.Team, { _id: currentProject.defaultTeam }).then(t => { currentTeam = t }).catch(() => { currentTeam = undefined })
+    if (currentProject?.defaultGroup != null) {
+      client.findOne(groupPlugin.class.Group, { _id: currentProject.defaultGroup }).then(t => { currentGroup = t }).catch(() => { currentGroup = undefined })
     } else {
-      currentTeam = undefined
+      currentGroup = undefined
     }
   }
 
@@ -404,8 +404,8 @@
 
   function updateAssigneeId (object: IssueDraft, currentProject: Project | undefined): void {
     if (!isAssigneeTouched && object.assignee == null && currentProject !== undefined) {
-      if (currentProject.defaultTeam !== undefined) {
-        // Team assigned project - assignee stays null, team label shown
+      if (currentProject.defaultGroup !== undefined) {
+        // Group assigned project - assignee stays null, group label shown
         object.assignee = null
       } else if (currentProject.defaultAssignee !== undefined) {
         object.assignee = currentProject.defaultAssignee
@@ -983,9 +983,9 @@
         }}
       />
     </div>
-    {#if currentProject?.defaultTeam != null && currentTeam != null}
-      <div class="team-label-container">
-        <span class="team-label-text">{currentTeam.name} ({currentTeam.members.length} members)</span>
+    {#if currentProject?.defaultGroup != null && currentGroup != null}
+      <div class="group-label-container">
+        <span class="group-label-text">{currentGroup.name} ({currentGroup.members.length} members)</span>
       </div>
     {/if}
     <Component
