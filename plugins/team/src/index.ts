@@ -2,7 +2,7 @@
 // Copyright 2025
 //
 
-import { type Doc, type Ref, type Class } from "@hcengineering/core"
+import { type Doc, type Ref, type Class, type AccountUuid } from "@hcengineering/core"
 import type { Asset, IntlString, Plugin } from "@hcengineering/platform"
 import { plugin } from "@hcengineering/platform"
 import { type AnyComponent } from "@hcengineering/ui"
