@@ -156,7 +156,7 @@ export class TProject extends TTaskProject implements Project {
  * @public
  */
 
-@Model(groupPlugin.class.Group, core.class.Doc, DOMAIN_MODEL)
+@Model(groupPlugin.class.Group, core.class.Doc, DOMAIN_TRACKER)
 @UX(tracker.string.Group, tracker.icon.Home, 'Group', 'name')
 export class TGroup extends TDoc implements Group {
   @Prop(TypeString(), tracker.string.GroupName)
