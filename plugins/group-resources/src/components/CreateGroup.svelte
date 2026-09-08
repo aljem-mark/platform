@@ -1,20 +1,19 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte"
   import core, { type AccountUuid } from "@hcengineering/core"
-  import { getClient, Card } from "@hcengineering/presentation"
-  import { EditBox } from "@hcengineering/ui"
+  import { getClient } from "@hcengineering/presentation"
+  import Modal, { ModernEditbox, Label } from "@hcengineering/ui"
   import groupPlugin from "@hcengineering/group"
-
+  
   const dispatch = createEventDispatcher()
   const client = getClient()
 
   let name: string = ""
-  let description: string = ""
   let saving = false
 
   $: canSave = name.trim().length > 0 && !saving
 
-  async function createGroup (): Promise<void> {
+  async function save (): Promise<void> {
     if (!canSave) return
     saving = true
     try {
@@ -23,7 +22,7 @@
         core.space.Workspace,
         {
           name: name.trim(),
-          description: description.trim(),
+          description: "",
           members: [] as AccountUuid[],
           archived: false
         }
@@ -37,28 +36,21 @@
   }
 </script>
 
-<Card
+<Modal
   label={groupPlugin.string.CreateGroup}
-  {canSave}
-  okAction={createGroup}
-  on:close={() => dispatch("close")}
-  on:changeContent
+  type={"type-popup"}
+  okLabel={groupPlugin.string.CreateGroup}
+  okAction={save}
+  onCancel={() => dispatch("close")}
+  bind:canSave
 >
-  <div class="flex-col flex-gap-2">
-    <EditBox
+  <div class="flex-col">
+    <ModernEditbox
       bind:value={name}
-      placeholder={groupPlugin.string.GroupNamePlaceholder}
-      kind="large-style"
-      focusIndex={1}
-      autoFocus
-      fullSize
-    />
-    <EditBox
-      bind:value={description}
-      placeholder={groupPlugin.string.GroupDescriptionPlaceholder}
-      kind="large-style"
-      focusIndex={2}
-      fullSize
+      label={groupPlugin.string.GroupNamePlaceholder}
+      kind={"ghost"}
+      size={"large"}
+      width={"100%"}
     />
   </div>
-</Card>
+</Modal>
