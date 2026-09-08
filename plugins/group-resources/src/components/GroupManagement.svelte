@@ -3,7 +3,7 @@
   import { getClient } from "@hcengineering/presentation"
   import { type Group } from "@hcengineering/group"
   import groupPlugin from "@hcengineering/group"
-  import { showPopup, Header, Breadcrumb, Scroller, Button } from "@hcengineering/ui"
+  import { showPopup, Header, Breadcrumb, Scroller, ModernButton, IconAdd } from "@hcengineering/ui"
   import CreateGroup from "./CreateGroup.svelte"
 
   let groups: Group[] = []
@@ -36,7 +36,7 @@
   <Header adaptive={"disabled"}>
     <Breadcrumb icon={groupPlugin.icon.Group} label={groupPlugin.string.Groups} size={"large"} isCurrent />
     <svelte:fragment slot="actions">
-      <Button label={groupPlugin.string.CreateGroup} kind="primary" size="medium" on:click={handleCreate} />
+      <ModernButton kind="primary" icon={IconAdd} label={groupPlugin.string.CreateGroup} size="small" on:click={handleCreate} />
     </svelte:fragment>
   </Header>
   <div class="hulyComponent-content__column content">
@@ -47,7 +47,6 @@
     {:else if groups.length === 0}
       <div class="flex-col-center mt-8">
         <p>No groups created yet.</p>
-        <Button label={groupPlugin.string.CreateGroup} kind="primary" size="medium" on:click={handleCreate} />
       </div>
     {:else}
       <Scroller align={"center"} padding={"var(--spacing-3)"} bottomPadding={"var(--spacing-3)"}>

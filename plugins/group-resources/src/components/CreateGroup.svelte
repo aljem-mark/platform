@@ -2,7 +2,7 @@
   import { createEventDispatcher } from "svelte"
   import core, { type AccountUuid } from "@hcengineering/core"
   import presentation, { getClient } from "@hcengineering/presentation"
-  import Modal, { ModernEditbox, Label } from "@hcengineering/ui"
+  import { Modal, ModernEditbox } from "@hcengineering/ui"
   import groupPlugin from "@hcengineering/group"
   
   const dispatch = createEventDispatcher()
