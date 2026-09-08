@@ -1,15 +1,19 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte"
-  import core, { type AccountUuid } from "@hcengineering/core"
-  import presentation, { getClient } from "@hcengineering/presentation"
-  import { Modal, ModernEditbox } from "@hcengineering/ui"
-  import groupPlugin from "@hcengineering/group"
-  
+  import core, { type AccountUuid, type Ref } from "@hcengineering/core"
+  import presentation, { getClient, MessageBox } from "@hcengineering/presentation"
+  import { Modal, ModernEditbox, showPopup } from "@hcengineering/ui"
+  import groupPlugin, { type Group } from "@hcengineering/group"
+
+  export let group: Group | undefined = undefined
+
   const dispatch = createEventDispatcher()
   const client = getClient()
 
-  let name: string = ""
+  let name: string = group?.name ?? ""
+  let description: string = group?.description ?? ""
   let saving = false
+  let isEdit = group != null
 
   $: canSave = name.trim().length > 0 && !saving
 
@@ -17,34 +21,54 @@
     if (!canSave) return
     saving = true
     try {
-      await client.createDoc(
-        groupPlugin.class.Group,
-        core.space.Workspace,
-        {
+      if (isEdit && group != null) {
+        await client.update(group, {
           name: name.trim(),
-          description: "",
-          members: [] as AccountUuid[],
-          archived: false
-        }
-      )
+          description: description.trim()
+        })
+      } else {
+        await client.createDoc(
+          groupPlugin.class.Group,
+          core.space.Workspace,
+          {
+            name: name.trim(),
+            description: description.trim(),
+            members: [] as AccountUuid[],
+            archived: false
+          }
+        )
+      }
     } catch (e) {
-      console.error("Failed to create group", e)
+      console.error("Failed to save group", e)
     } finally {
       saving = false
       dispatch("close")
     }
   }
+
+  async function handleDelete (): Promise<void> {
+    if (group == null) return
+    showPopup(MessageBox, {
+      label: groupPlugin.string.DeleteGroup,
+      message: groupPlugin.string.DeleteGroup + " " + group.name + "?",
+      dangerous: true,
+      action: async () => {
+        await client.removeDoc(groupPlugin.class.Group, group.space, group._id)
+        dispatch("close")
+      }
+    })
+  }
 </script>
 
 <Modal
-  label={groupPlugin.string.CreateGroup}
+  label={isEdit ? groupPlugin.string.EditGroup : groupPlugin.string.CreateGroup}
   type={"type-popup"}
   okLabel={presentation.string.Save}
   okAction={save}
   onCancel={() => dispatch("close")}
   bind:canSave
 >
-  <div class="flex-col">
+  <div class="flex-col flex-gap-2">
     <ModernEditbox
       bind:value={name}
       label={groupPlugin.string.GroupNamePlaceholder}
@@ -52,5 +76,34 @@
       size={"large"}
       width={"100%"}
     />
+    <ModernEditbox
+      bind:value={description}
+      label={groupPlugin.string.GroupDescriptionPlaceholder}
+      kind={"ghost"}
+      size={"large"}
+      width={"100%"}
+    />
+    {#if isEdit}
+      <div class="flex-row-reverse mt-6">
+        <button class="danger-button" on:click={handleDelete}>{groupPlugin.string.DeleteGroup}</button>
+      </div>
+    {/if}
   </div>
 </Modal>
+
+<style lang="scss">
+  .danger-button {
+    background: var(--theme-error-color);
+    color: var(--theme-button-contrast-color);
+    border: none;
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    &:hover { opacity: 0.9; }
+  }
+  .flex-row-reverse {
+    display: flex;
+    flex-direction: row-reverse;
+  }
+</style>
