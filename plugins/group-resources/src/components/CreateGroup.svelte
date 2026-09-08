@@ -28,11 +28,11 @@
           archived: false
         }
       )
-      dispatch("close")
     } catch (e) {
       console.error("Failed to create group", e)
     } finally {
       saving = false
+      dispatch("close")
     }
   }
 </script>
