@@ -337,7 +337,7 @@ export function createModel (builder: Builder): void {
       order: 1040,
       role: AccountRole.Maintainer
     },
-    groupId
+    'setting:ids:Groups' as Ref<any>
   )
   builder.createDoc(
     setting.class.WorkspaceSettingCategory,
