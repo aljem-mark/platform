@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte"
   import core, { type AccountUuid } from "@hcengineering/core"
-  import { getClient } from "@hcengineering/presentation"
+  import presentation, { getClient } from "@hcengineering/presentation"
   import Modal, { ModernEditbox, Label } from "@hcengineering/ui"
   import groupPlugin from "@hcengineering/group"
   
@@ -39,7 +39,7 @@
 <Modal
   label={groupPlugin.string.CreateGroup}
   type={"type-popup"}
-  okLabel={groupPlugin.string.CreateGroup}
+  okLabel={presentation.string.Save}
   okAction={save}
   onCancel={() => dispatch("close")}
   bind:canSave
