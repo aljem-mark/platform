@@ -47,6 +47,7 @@ import {
   TypeRecord,
   TypeRef,
   TypeString,
+  TypeBoolean,
   UX
 } from '@hcengineering/model'
 import attachment from '@hcengineering/model-attachment'
@@ -55,6 +56,7 @@ import notification, { TCommonInboxNotification } from '@hcengineering/model-not
 import task, { TTask, TProject as TTaskProject } from '@hcengineering/model-task'
 import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
 import tags, { type TagElement } from '@hcengineering/tags'
+import teamPlugin, { type Team } from '@hcengineering/team'
 import time, { type ToDo } from '@hcengineering/time'
 import {
   type ProjectTargetPreference,
@@ -149,6 +151,28 @@ export class TProject extends TTaskProject implements Project {
   @Prop(TypeRecord(), tracker.string.WorkingDaysConfig)
     workingDaysConfig?: WorkingDaysConfig
 }
+
+/**
+ * @public
+ */
+
+@Model(tracker.class.Team, core.class.Doc, DOMAIN_MODEL)
+@UX(tracker.string.Team, tracker.icon.Home, 'Team', 'name')
+export class TTeam extends TDoc implements Team {
+  @Prop(TypeString(), tracker.string.TeamName)
+  @Index(IndexKind.FullText)
+    name!: string
+
+  @Prop(TypeString(), tracker.string.TeamDescription)
+  @Index(IndexKind.FullText)
+    description!: string
+
+  members!: AccountUuid[]
+
+  @Prop(TypeBoolean(), tracker.string.Archived)
+    archived!: boolean
+}
+
 /**
  * @public
  */

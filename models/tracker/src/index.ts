@@ -54,7 +54,8 @@ import {
   TTypeIssuePriority,
   TTypeMilestoneStatus,
   TTypeRemainingTime,
-  TTypeReportedTime
+  TTypeReportedTime,
+  TTeam
 } from './types'
 import { defineViewlets } from './viewlets'
 
@@ -472,6 +473,7 @@ function defineApplication (
 export function createModel (builder: Builder): void {
   builder.createModel(
     TProject,
+    TTeam,
     TComponent,
     TIssue,
     TIssueRelation,

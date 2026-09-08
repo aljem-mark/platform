@@ -567,6 +567,7 @@ export * from './analytics'
 
 const pluginState = plugin(trackerId, {
   class: {
+    Team: '' as Ref<Class<Team>>,
     Project: '' as Ref<Class<Project>>,
     Issue: '' as Ref<Class<Issue>>,
     IssueRelation: '' as Ref<Class<IssueRelation>>,
@@ -761,6 +762,11 @@ const pluginState = plugin(trackerId, {
     GanttAriaResizeEnd: '' as IntlString,
     GanttDependency: '' as IntlString,
     GanttLag: '' as IntlString,
+    Team: '' as IntlString,
+    Archived: '' as IntlString,
+    TeamName: '' as IntlString,
+    TeamDescription: '' as IntlString,
+    TeamMembers: '' as IntlString,
     WorkingDaysConfig: '' as IntlString,
     WorkingDaysTitle: '' as IntlString,
     WorkingDaysDescription: '' as IntlString,

@@ -10,7 +10,7 @@ import { type AnyComponent } from "@hcengineering/ui"
 export interface Team extends Doc {
   name: string
   description: string
-  members: Ref<Team>[]
+  members: AccountUuid[]
   archived: boolean
 }
 
