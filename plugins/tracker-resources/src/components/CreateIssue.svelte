@@ -975,6 +975,11 @@
         }}
       />
     </div>
+    {#if currentProject?.defaultTeam != null && currentTeam != null}
+      <div class="team-label-container">
+        <span class="team-label-text">{currentTeam.name} ({currentTeam.members.length} members)</span>
+      </div>
+    {/if}
     <Component
       is={tags.component.TagsDropdownEditor}
       props={{
