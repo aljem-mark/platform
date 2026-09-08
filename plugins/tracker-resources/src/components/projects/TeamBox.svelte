@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type Ref } from '@hcengineering/core'
   import { type Team } from '@hcengineering/team'
-  import { SelectNoneButton, SelectPopupItem } from '@hcengineering/ui'
+  import { showPopup, SelectPopup } from '@hcengineering/ui'
 
   export let value: Ref<Team> | undefined
   export let teams: Team[] = []
@@ -14,20 +14,20 @@
   let selectedTeam = value != null ? teams.find(t => t._id === value) : undefined
 
   function handleSelect (evt: MouseEvent): void {
-    const items: SelectPopupItem[][] = [
-      [{ id: '' as any, label: 'None' }],
-      teams.map(t => ({ id: t._id, label: t.name }))
-    ]
     showPopup(
-      SelectPopupItem,
+      SelectPopup,
       {
         value: value ?? '' as any,
-        items
+        items: [
+          [{ id: '' as any, label: 'None' }],
+          teams.map(t => ({ id: t._id, label: t.name }))
+        ]
       },
       'top',
-      (result?: Ref<Team>) => {
+      (result?: string) => {
         if (result !== undefined) {
-          value = result === '' as any ? undefined : result
+          const res = result as unknown as Ref<Team>
+          value = res === ("" as unknown as Ref<Team>) ? undefined : res
           selectedTeam = value != null ? teams.find(t => t._id === value) : undefined
         }
       }

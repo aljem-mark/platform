@@ -116,6 +116,7 @@ export interface Project extends TaskProject, IconProps {
   sequence: number
   defaultIssueStatus?: Ref<IssueStatus>
   defaultAssignee?: Ref<Employee>
+  defaultTeam?: Ref<Team>
   defaultTimeReportDay: TimeReportDayType
   /**
    * Optional Gantt working-days calendar. See {@link WorkingDaysConfig}.
@@ -850,3 +851,5 @@ export function createStatesData (data: TaskStatusFactory[]): Omit<Data<Status>,
   }
   return states
 }
+
+import { type Team } from "@hcengineering/team"

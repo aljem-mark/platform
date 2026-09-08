@@ -234,6 +234,14 @@
   fillDefaults(hierarchy, object, tracker.class.Issue)
 
   let currentProject: Project | undefined
+  let currentTeam: Team | undefined
+  $: {
+    if (currentProject?.defaultTeam != null) {
+      client.findOne(teamPlugin.class.Team, { _id: currentProject.defaultTeam }).then(t => { currentTeam = t }).catch(() => { currentTeam = undefined })
+    } else {
+      currentTeam = undefined
+    }
+  }
 
   let descriptionBox: AttachmentStyledBox | undefined
 

@@ -56,7 +56,7 @@
   import view from '@hcengineering/view'
   import { IconPicker } from '@hcengineering/view-resources'
   import { deepEqual } from 'fast-equals'
-  import { createEventDispatcher } from 'svelte'
+  import { onMount, createEventDispatcher } from 'svelte'
 
   import tracker from '../../plugin'
   import teamPlugin, { type Team } from '@hcengineering/team'
@@ -529,7 +529,6 @@
         bind:value={defaultAssignee}
         titleDeselect={tracker.string.Unassigned}
         showNavigate={false}
-        disabled={defaultTeam != null}
         showTooltip={{ label: tracker.string.DefaultAssignee }}
       />
     </div>
