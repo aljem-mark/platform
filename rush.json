@@ -1322,7 +1322,15 @@
     },
     {
       "packageName": "@hcengineering/tags-resources",
-      "projectFolder": "plugins/tags-resources",
+      "projectFolder": "plugins/tags-resources"
+    },
+    {
+      "packageName": "@hcengineering/team",
+      "projectFolder": "plugins/team"
+    },
+    {
+      "packageName": "@hcengineering/team-resources",
+      "projectFolder": "plugins/team-resources",
       "shouldPublish": false
     },
     {

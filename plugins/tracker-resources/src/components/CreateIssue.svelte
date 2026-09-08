@@ -85,6 +85,7 @@
 
   import { activeComponent, activeMilestone, generateIssueShortLink, updateIssueRelation } from '../issues'
   import tracker from '../plugin'
+  import teamPlugin, { type Team } from '@hcengineering/team'
   import SetParentIssueActionPopup from './SetParentIssueActionPopup.svelte'
   import SubIssues from './SubIssues.svelte'
   import ComponentSelector from './components/ComponentSelector.svelte'
@@ -395,7 +396,10 @@
 
   function updateAssigneeId (object: IssueDraft, currentProject: Project | undefined): void {
     if (!isAssigneeTouched && object.assignee == null && currentProject !== undefined) {
-      if (currentProject.defaultAssignee !== undefined) {
+      if (currentProject.defaultTeam !== undefined) {
+        // Team assigned project - assignee stays null, team label shown
+        object.assignee = null
+      } else if (currentProject.defaultAssignee !== undefined) {
         object.assignee = currentProject.defaultAssignee
       } else {
         object.assignee = null

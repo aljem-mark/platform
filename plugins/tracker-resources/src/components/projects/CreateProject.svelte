@@ -59,9 +59,12 @@
   import { createEventDispatcher } from 'svelte'
 
   import tracker from '../../plugin'
+  import teamPlugin, { type Team } from '@hcengineering/team'
   import StatusSelector from '../issues/StatusSelector.svelte'
   import { workingDaysUpdate } from '../gantt/lib/working-days-editor'
   import WorkingDaysEditor from './WorkingDaysEditor.svelte'
+  import TeamBox from './TeamBox.svelte'
+  import { Loading } from '@hcengineering/ui'
 
   export let project: Project | undefined = undefined
   export let namePlaceholder: string = ''
@@ -78,6 +81,9 @@
   let color = project?.color ?? getColorNumberByText(name)
   let isColorSelected = false
   let defaultAssignee: Ref<Employee> | null | undefined = project?.defaultAssignee ?? null
+  let defaultTeam: Ref<Team> | undefined = project?.defaultTeam
+  let allTeams: Team[] = []
+  let teamLoading = true
   let members: AccountUuid[] =
     project?.members !== undefined ? hierarchy.clone(project.members) : [getCurrentAccount().uuid]
   let owners: AccountUuid[] =
@@ -87,6 +93,13 @@
   let defaultStatus: Ref<IssueStatus> | undefined = project?.defaultIssueStatus
   // Flat copy: the editor mutates the object; the query-cache doc stays
   // untouched until save.
+  onMount(async () => {
+    try {
+      allTeams = await client.findAll(teamPlugin.class.Team, { archived: { $ne: true } })
+    } catch (e) { console.error(e) }
+    finally { teamLoading = false }
+  })
+
   let workingDaysConfig: WorkingDaysConfig | undefined =
     project?.workingDaysConfig !== undefined ? { ...project.workingDaysConfig } : undefined
   let rolesAssignment: RolesAssignment | undefined
@@ -137,6 +150,7 @@
       identifier: identifier.toUpperCase(),
       sequence: 0,
       defaultAssignee: defaultAssignee ?? undefined,
+      defaultTeam: defaultTeam,
       icon,
       color,
       defaultIssueStatus: defaultStatus ?? ('' as Ref<IssueStatus>),
@@ -175,6 +189,9 @@
     }
     if (projectData.private !== project?.private) {
       update.private = projectData.private
+    }
+    if (projectData.defaultTeam !== project?.defaultTeam) {
+      update.defaultTeam = projectData.defaultTeam
     }
     if (projectData.defaultAssignee !== project?.defaultAssignee) {
       update.defaultAssignee = projectData.defaultAssignee
@@ -512,8 +529,27 @@
         bind:value={defaultAssignee}
         titleDeselect={tracker.string.Unassigned}
         showNavigate={false}
+        disabled={defaultTeam != null}
         showTooltip={{ label: tracker.string.DefaultAssignee }}
       />
+    </div>
+    <div class="antiGrid-row">
+      <div class="antiGrid-row__header">
+        <Label label={tracker.string.DefaultTeam} />
+      </div>
+      {#if teamLoading}
+        <Loading />
+      {:else}
+        <TeamBox
+          label={tracker.string.DefaultTeam}
+          placeholder={tracker.string.DefaultTeam}
+          kind={'regular'}
+          size={'large'}
+          bind:value={defaultTeam}
+          teams={allTeams}
+          showTooltip={{ label: tracker.string.DefaultTeam }}
+        />
+      {/if}
     </div>
     <div class="antiGrid-row">
       <div class="antiGrid-row__header">

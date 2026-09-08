@@ -138,6 +138,9 @@ export class TProject extends TTaskProject implements Project {
   @Prop(TypeRef(contact.mixin.Employee), tracker.string.DefaultAssignee)
     defaultAssignee!: Ref<Employee>
 
+  @Prop(TypeRef(teamPlugin.class.Team), tracker.string.DefaultTeam)
+    defaultTeam?: Ref<Team>
+
   declare defaultTimeReportDay: TimeReportDayType
 
   @Prop(Collection(tracker.class.RelatedIssueTarget), tracker.string.RelatedIssues)
