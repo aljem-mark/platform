@@ -35,6 +35,8 @@ import exportPlugin, { exportId } from '@hcengineering/export'
 import gmail, { gmailId } from '@hcengineering/gmail'
 import globalProfile, { globalProfileId, globalProfileRoute } from '@hcengineering/global-profile'
 import guest, { guestId } from '@hcengineering/guest'
+import { groupId, groupId as groupIdForStrings } from '@hcengineering/group'
+import '@hcengineering/group-assets'
 import { hrId } from '@hcengineering/hr'
 import { imageCropperId } from '@hcengineering/image-cropper'
 import { inventoryId } from '@hcengineering/inventory'
@@ -342,6 +344,7 @@ function configureI18n(): void {
   addStringsLoader(settingId, async (lang: string) => await import(`@hcengineering/setting-assets/lang/${lang}.json`))
   addStringsLoader(supportId, async (lang: string) => await import(`@hcengineering/support-assets/lang/${lang}.json`))
   addStringsLoader(tagsId, async (lang: string) => await import(`@hcengineering/tags-assets/lang/${lang}.json`))
+addStringsLoader(groupIdForStrings, async (lang: string) => await import(`@hcengineering/group-assets/lang/${lang}.json`))
   addStringsLoader(taskId, async (lang: string) => await import(`@hcengineering/task-assets/lang/${lang}.json`))
   addStringsLoader(telegramId, async (lang: string) => await import(`@hcengineering/telegram-assets/lang/${lang}.json`))
   addStringsLoader(
@@ -575,6 +578,7 @@ export async function configurePlatform() {
   addLocation(viewId, async () => await import(/* webpackChunkName: "view" */ '@hcengineering/view-resources'))
   addLocation(converterId, async () => await import(/* webpackChunkName: "converter" */ '@hcengineering/converter-resources'))
   addLocation(taskId, async () => await import(/* webpackChunkName: "task" */ '@hcengineering/task-resources'))
+  addLocation(groupId, async () => await import(/* webpackChunkName: "group" */ '@hcengineering/group-resources'))
   addLocation(contactId, async () => await import(/* webpackChunkName: "contact" */ '@hcengineering/contact-resources'))
   addLocation(chunterId, async () => await import(/* webpackChunkName: "chunter" */ '@hcengineering/chunter-resources'))
   addLocation(recruitId, async () => await import(/* webpackChunkName: "recruit" */ '@hcengineering/recruit-resources'))

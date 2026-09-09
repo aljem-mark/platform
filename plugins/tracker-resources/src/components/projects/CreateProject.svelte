@@ -56,12 +56,15 @@
   import view from '@hcengineering/view'
   import { IconPicker } from '@hcengineering/view-resources'
   import { deepEqual } from 'fast-equals'
-  import { createEventDispatcher } from 'svelte'
+  import { onMount, createEventDispatcher } from 'svelte'
 
   import tracker from '../../plugin'
+  import groupPlugin, { type Group } from '@hcengineering/group'
   import StatusSelector from '../issues/StatusSelector.svelte'
   import { workingDaysUpdate } from '../gantt/lib/working-days-editor'
   import WorkingDaysEditor from './WorkingDaysEditor.svelte'
+  import GroupBox from './GroupBox.svelte'
+  import { Loading } from '@hcengineering/ui'
 
   export let project: Project | undefined = undefined
   export let namePlaceholder: string = ''
@@ -78,6 +81,9 @@
   let color = project?.color ?? getColorNumberByText(name)
   let isColorSelected = false
   let defaultAssignee: Ref<Employee> | null | undefined = project?.defaultAssignee ?? null
+  let defaultGroup: Ref<Group> | undefined = project?.defaultGroup
+  let allGroups: Group[] = []
+  let groupLoading = true
   let members: AccountUuid[] =
     project?.members !== undefined ? hierarchy.clone(project.members) : [getCurrentAccount().uuid]
   let owners: AccountUuid[] =
@@ -87,6 +93,13 @@
   let defaultStatus: Ref<IssueStatus> | undefined = project?.defaultIssueStatus
   // Flat copy: the editor mutates the object; the query-cache doc stays
   // untouched until save.
+  onMount(async () => {
+    try {
+      allGroups = await client.findAll(groupPlugin.class.Group, { archived: { $ne: true } })
+    } catch (e) { console.error(e) }
+    finally { groupLoading = false }
+  })
+
   let workingDaysConfig: WorkingDaysConfig | undefined =
     project?.workingDaysConfig !== undefined ? { ...project.workingDaysConfig } : undefined
   let rolesAssignment: RolesAssignment | undefined
@@ -137,6 +150,7 @@
       identifier: identifier.toUpperCase(),
       sequence: 0,
       defaultAssignee: defaultAssignee ?? undefined,
+      defaultGroup: defaultGroup,
       icon,
       color,
       defaultIssueStatus: defaultStatus ?? ('' as Ref<IssueStatus>),
@@ -175,6 +189,9 @@
     }
     if (projectData.private !== project?.private) {
       update.private = projectData.private
+    }
+    if (projectData.defaultGroup !== project?.defaultGroup) {
+      update.defaultGroup = projectData.defaultGroup
     }
     if (projectData.defaultAssignee !== project?.defaultAssignee) {
       update.defaultAssignee = projectData.defaultAssignee
@@ -514,6 +531,24 @@
         showNavigate={false}
         showTooltip={{ label: tracker.string.DefaultAssignee }}
       />
+    </div>
+    <div class="antiGrid-row">
+      <div class="antiGrid-row__header">
+        <Label label={tracker.string.DefaultGroup} />
+      </div>
+      {#if groupLoading}
+        <Loading />
+      {:else}
+        <GroupBox
+          label={tracker.string.DefaultGroup}
+          placeholder={tracker.string.DefaultGroup}
+          kind={'regular'}
+          size={'large'}
+          bind:value={defaultGroup}
+          groups={allGroups}
+          showTooltip={{ label: tracker.string.DefaultGroup }}
+        />
+      {/if}
     </div>
     <div class="antiGrid-row">
       <div class="antiGrid-row__header">

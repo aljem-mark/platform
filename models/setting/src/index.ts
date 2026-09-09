@@ -24,6 +24,7 @@ import {
   type Ref,
   type IntegrationKind
 } from '@hcengineering/core'
+import groupPlugin, { groupId } from '@hcengineering/group'
 import exportPlugin from '@hcengineering/export'
 import { Mixin, Model, Prop, TypeRecord, UX, type Builder } from '@hcengineering/model'
 import core, { TClass, TConfiguration, TDoc } from '@hcengineering/model-core'
@@ -324,6 +325,19 @@ export function createModel (builder: Builder): void {
       order: 1050
     },
     'setting:ids:AccountPermissionsSettings' as Ref<any>
+  )
+  builder.createDoc(
+    setting.class.WorkspaceSettingCategory,
+    core.space.Model,
+    {
+      name: 'teamManagement',
+      label: groupPlugin.string.Groups,
+      icon: groupPlugin.icon.Group,
+      component: groupPlugin.component.GroupManagement,
+      order: 1040,
+      role: AccountRole.Maintainer
+    },
+    'setting:ids:Groups' as Ref<any>
   )
   builder.createDoc(
     setting.class.WorkspaceSettingCategory,

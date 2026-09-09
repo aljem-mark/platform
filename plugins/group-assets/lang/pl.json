@@ -1,0 +1,21 @@
+{
+  "string": {
+    "Group": "Group",
+    "Groups": "Groups",
+    "CreateGroup": "Create Group",
+    "EditGroup": "Edit Group",
+    "DeleteGroup": "Delete Group",
+    "GroupName": "Group Name",
+    "GroupDescription": "Description",
+    "GroupMembers": "Members",
+    "AddMember": "Add Member",
+    "RemoveMember": "Remove Member",
+    "ArchiveGroup": "Archive Group",
+    "Archived": "Archived",
+    "NoGroups": "No groups created yet",
+    "GroupNamePlaceholder": "Enter group name",
+    "GroupDescriptionPlaceholder": "Enter group description",
+    "DefaultGroup": "Default Group",
+    "EffectiveMembers": "Effective Members"
+  }
+}
