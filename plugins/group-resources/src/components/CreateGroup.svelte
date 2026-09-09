@@ -2,7 +2,7 @@
   import { createEventDispatcher } from "svelte"
   import core, { type AccountUuid, type Ref } from "@hcengineering/core"
   import presentation, { getClient, MessageBox } from "@hcengineering/presentation"
-  import { Modal, ModernEditbox, showPopup } from "@hcengineering/ui"
+  import { Modal, ModernEditbox, showPopup, Button } from "@hcengineering/ui"
   import groupPlugin, { type Group } from "@hcengineering/group"
   import { AccountArrayEditor } from "@hcengineering/contact-resources"
 
@@ -104,23 +104,15 @@
   </div>
   <svelte:fragment slot="buttons">
     {#if isEdit}
-      <button class="danger-button" on:click={handleDelete}>
-        {groupPlugin.string.DeleteGroup}
-      </button>
+      <div class="delete-section">
+        <Button label={groupPlugin.string.DeleteGroup} kind="dangerous" on:click={handleDelete} />
+      </div>
     {/if}
   </svelte:fragment>
 </Modal>
 
 <style lang="scss">
-  .danger-button {
-    background: var(--theme-error-color);
-    color: var(--theme-button-contrast-color);
-    border: none;
-    border-radius: 0.375rem;
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-    cursor: pointer;
-    &:hover { opacity: 0.9; }
+  .delete-section {
     margin-right: auto;
   }
   .font-medium-14 { font-weight: 500; font-size: 0.875rem; }
