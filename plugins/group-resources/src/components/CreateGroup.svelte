@@ -90,19 +90,17 @@
       size={"large"}
       width={"100%"}
     />
-    {#if isEdit}
-      <div class="members-section mt-4">
-        <div class="font-medium-14 mb-2">Members</div>
-        <AccountArrayEditor
-          label={groupPlugin.string.GroupMembers}
-          value={members}
-          onChange={handleMembersChange}
-          kind="link"
-          size="large"
-          allowGuests={true}
-        />
-      </div>
-    {/if}
+    <div class="members-section mt-4">
+      <div class="font-medium-14 mb-2">Members</div>
+      <AccountArrayEditor
+        label={groupPlugin.string.GroupMembers}
+        value={members}
+        onChange={handleMembersChange}
+        kind="link"
+        size="large"
+        allowGuests={true}
+      />
+    </div>
   </div>
   <svelte:fragment slot="buttons">
     {#if isEdit}
