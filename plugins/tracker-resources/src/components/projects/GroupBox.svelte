@@ -1,14 +1,15 @@
 <script lang="ts">
   import { type Ref } from '@hcengineering/core'
   import { type Group } from '@hcengineering/group'
-  import { showPopup, SelectPopup } from '@hcengineering/ui'
+  import { showPopup, SelectPopup, Label } from '@hcengineering/ui'
+  import { type IntlString } from '@hcengineering/platform'
 
   export let value: Ref<Group> | undefined
   export let groups: Group[] = []
   export let kind: string = 'regular'
   export let size: string = 'large'
   export let label: string = 'Group'
-  export let placeholder: string = 'Group'
+  export let placeholder: IntlString = '' as IntlString
   export let showTooltip: any = undefined
 
   let selectedGroup = value != null ? groups.find(t => t._id === value) : undefined
@@ -27,11 +28,14 @@
         ]
       },
       'top',
-      (result?: string) => {
-        if (result !== undefined) {
-          const res = result as unknown as Ref<Group>
-          value = res === ("" as unknown as Ref<Group>) ? undefined : res
+      (result?: { id: string | number | null }) => {
+        if (result !== undefined && result.id !== undefined) {
+          const groupId = result.id as string
+          value = groupId === "" ? undefined : groupId as unknown as Ref<Group>
           selectedGroup = value != null ? groups.find(t => t._id === value) : undefined
+          if (selectedGroup == null && value != null) {
+            value = undefined
+          }
         }
       }
     )
@@ -42,7 +46,7 @@
   {#if selectedGroup != null}
     <span class="group-name">{selectedGroup.name}</span>
   {:else}
-    <span class="placeholder">{placeholder}</span>
+    <span class="placeholder"><Label label={placeholder} /></span>
   {/if}
 </div>
 
