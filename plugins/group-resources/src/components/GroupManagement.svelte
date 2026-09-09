@@ -45,14 +45,14 @@
       <Scroller align={"center"} padding={"var(--spacing-3)"} bottomPadding={"var(--spacing-3)"}>
         <div class="hulyComponent-content">
           {#each groups as group}
-            <div class="flex-row-center p-2 flex-no-shrink">
-              <div class="p-1 min-w-80">
-                <span class="font-medium-14">{group.name}</span>
+            <div class="hulyComponent-row">
+              <div class="flex-row-center flex-gap-2" style="flex:1; min-width:0;">
+                <span class="font-regular-14 overflow-text">{group.name}</span>
                 {#if group.description}
-                  <span class="text-sm">{group.description}</span>
+                  <span class="caption-color font-regular-14">{group.description}</span>
                 {/if}
               </div>
-              <div class="members-count">
+              <div style="white-space:nowrap;">
                 {group.members.length} member{group.members.length !== 1 ? "s" : ""}
               </div>
               <button class="edit-btn" on:click={() => handleEdit(group)}>
