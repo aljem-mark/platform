@@ -3,7 +3,7 @@
   import { createQuery, getClient } from "@hcengineering/presentation"
   import { type Group } from "@hcengineering/group"
   import groupPlugin from "@hcengineering/group"
-  import { showPopup, Header, Breadcrumb, ModernButton, IconAdd } from "@hcengineering/ui"
+  import { showPopup, Header, Breadcrumb, ModernButton, IconAdd, IconEdit } from "@hcengineering/ui"
   import { AccountArrayEditor } from "@hcengineering/contact-resources"
   import CreateGroup from "./CreateGroup.svelte"
 
@@ -56,7 +56,9 @@
             kind="regular"
             size="large"
           />
-          <button class="edit-btn" on:click={() => handleEdit(group)} title="Edit group">✎</button>
+          <button class="edit-btn" on:click={() => handleEdit(group)} title="Edit group">
+          <IconEdit size={"small"} />
+        </button>
         </div>
       {/each}
     {/if}
@@ -81,6 +83,8 @@
     white-space: nowrap;
   }
   .edit-btn {
+    display: inline-flex;
+    align-items: center;
     background: none;
     border: none;
     cursor: pointer;
