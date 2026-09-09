@@ -17,10 +17,13 @@
     showPopup(
       SelectPopup,
       {
-        value: value ?? '' as any,
-        items: [
-          [{ id: '' as any, label: 'None' }],
-          groups.map(t => ({ id: t._id, label: t.name }))
+        value: [
+          { id: '' as unknown as (string | number | null), text: 'None', isSelected: value == null },
+          ...groups.map(t => ({
+            id: t._id as string,
+            text: t.name,
+            isSelected: t._id === value
+          }))
         ]
       },
       'top',
