@@ -4,7 +4,7 @@
   import groupPlugin from "@hcengineering/group"
   import { showPopup, Header, Breadcrumb, Scroller, ModernButton, IconAdd, ButtonIcon, IconDelete } from "@hcengineering/ui"
   import CreateGroup from "./CreateGroup.svelte"
-  import { AccountArrayEditor } from "@hcengineering/contact-resources"
+
 
   let groups: Group[] = []
   let loading = true
@@ -52,18 +52,8 @@
                   <span class="text-sm">{group.description}</span>
                 {/if}
               </div>
-              <div class="members-pill">
-                <AccountArrayEditor
-                  label={groupPlugin.string.GroupMembers}
-                  value={group.members}
-                  onChange={(newMembers) => {
-                    const client = getClient()
-                    void client.update(group, { members: newMembers })
-                  }}
-                  kind="link"
-                  size="large"
-                  allowGuests={true}
-                />
+              <div class="members-count">
+                {group.members.length} member{group.members.length !== 1 ? "s" : ""}
               </div>
               <button class="edit-btn" on:click={() => handleEdit(group)}>
                 <span class="icon">{'✎'}</span>
@@ -77,18 +67,19 @@
 </div>
 
 <style lang="scss">
-  .font-medium-14 {
-    font-weight: 500;
-    font-size: 0.875rem;
+  .hulyComponent-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 0.75rem 0 0.5rem;
+    min-height: 2.5rem;
+    border-radius: 0.375rem;
+    &:hover { background-color: var(--theme-nav-item-hover); }
   }
-  .text-sm {
-    font-size: 0.875rem;
-    color: var(--theme-caption-color);
-  }
-  .members-pill {
-    min-width: 10rem;
-    margin: 0 0.5rem;
-  }
+  .font-regular-14 { font-size: 0.875rem; font-weight: 400; }
+  .overflow-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .caption-color { color: var(--theme-caption-color); }
+  .text-sm { font-size: 0.875rem; color: var(--theme-caption-color); }
   .edit-btn {
     background: none;
     border: none;

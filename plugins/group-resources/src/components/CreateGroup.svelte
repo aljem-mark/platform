@@ -57,7 +57,7 @@
     if (group == null) return
     showPopup(MessageBox, {
       label: groupPlugin.string.DeleteGroup,
-      message: groupPlugin.string.DeleteGroup + " " + group.name + "?",
+      message: "Delete " + group.name + "?",
       dangerous: true,
       action: async () => {
         await client.removeDoc(groupPlugin.class.Group, group.space, group._id)
@@ -98,7 +98,7 @@
         onChange={handleMembersChange}
         kind="link"
         size="large"
-        allowGuests={true}
+        allowGuests={false}
       />
     </div>
   </div>
