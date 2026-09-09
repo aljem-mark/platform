@@ -2,9 +2,9 @@
   import { createQuery, getClient } from "@hcengineering/presentation"
   import { type Group } from "@hcengineering/group"
   import groupPlugin from "@hcengineering/group"
-  import { showPopup, Header, Breadcrumb, Scroller, ModernButton, IconAdd, ButtonIcon, IconDelete } from "@hcengineering/ui"
+  import { showPopup, Header, Breadcrumb, Scroller, ModernButton, IconAdd } from "@hcengineering/ui"
+  import { AccountArrayEditor } from "@hcengineering/contact-resources"
   import CreateGroup from "./CreateGroup.svelte"
-
 
   let groups: Group[] = []
   let loading = true
@@ -45,18 +45,26 @@
       <Scroller align={"center"} padding={"var(--spacing-3)"} bottomPadding={"var(--spacing-3)"}>
         <div class="hulyComponent-content">
           {#each groups as group}
-            <div class="hulyComponent-row">
-              <div class="flex-row-center flex-gap-2" style="flex:1; min-width:0;">
-                <span class="font-regular-14 overflow-text">{group.name}</span>
-                {#if group.description}
-                  <span class="caption-color font-regular-14">{group.description}</span>
-                {/if}
+            <div class="antiGrid-row">
+              <div class="antiGrid-row__header">
+                {group.name}
               </div>
-              <div style="white-space:nowrap;">
-                {group.members.length} member{group.members.length !== 1 ? "s" : ""}
+              <div class="members-pill" style="display:inline-flex; align-items:center;">
+                <AccountArrayEditor
+                  value={group.members}
+                  label={groupPlugin.string.GroupMembers}
+                  onChange={(newMembers) => {
+                    const client = getClient()
+                    void client.update(group, { members: newMembers })
+                  }}
+                  kind="regular"
+                  size="large"
+                />
               </div>
-              <button class="edit-btn" on:click={() => handleEdit(group)}>
-                <span class="icon">{'✎'}</span>
+              <button class="edit-pencil" on:click={() => handleEdit(group)} title="Edit group">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M11.5 1.5C11.6326 1.5 11.7598 1.55268 11.8536 1.64645L14.3536 4.14645C14.4473 4.24022 14.5 4.36739 14.5 4.5C14.5 4.63261 14.4473 4.75979 14.3536 4.85355L5.85355 13.3536C5.75979 13.4473 5.63261 13.5 5.5 13.5H3C2.72386 13.5 2.5 13.2761 2.5 13V10.5C2.5 10.3674 2.55268 10.2402 2.64645 10.1464L10.1464 2.64645C10.2402 2.55268 10.3674 2.5 10.5 2.5H11.5ZM10.5 3.60355L3.5 10.6036V12.5H5.39645L12.3964 5.5L10.5 3.60355ZM13.5 4.5L11.5 2.5L12.6464 3.64645L13.5 4.5Z" />
+                </svg>
               </button>
             </div>
           {/each}
@@ -67,26 +75,30 @@
 </div>
 
 <style lang="scss">
-  .hulyComponent-row {
+  .antiGrid-row {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0 0.75rem 0 0.5rem;
-    min-height: 2.5rem;
-    border-radius: 0.375rem;
-    &:hover { background-color: var(--theme-nav-item-hover); }
+    gap: 0.5rem;
+    padding: 0.25rem 0;
   }
-  .font-regular-14 { font-size: 0.875rem; font-weight: 400; }
-  .overflow-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .caption-color { color: var(--theme-caption-color); }
-  .text-sm { font-size: 0.875rem; color: var(--theme-caption-color); }
-  .edit-btn {
+  .antiGrid-row__header {
+    flex-shrink: 0;
+    width: 12rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--theme-caption-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .edit-pencil {
     background: none;
     border: none;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem;
     color: var(--theme-caption-color);
+    display: inline-flex;
+    align-items: center;
     &:hover { color: var(--theme-accent-color); }
-    .icon { font-size: 1rem; }
   }
 </style>
