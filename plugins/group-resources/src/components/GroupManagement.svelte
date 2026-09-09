@@ -95,5 +95,6 @@
   }
   .content {
     margin: 2rem 3.25rem;
+    max-width: 50rem;
   }
 </style>

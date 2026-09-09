@@ -87,7 +87,7 @@
       bind:value={description}
       label={groupPlugin.string.GroupDescriptionPlaceholder}
       kind={"ghost"}
-      size={"large"}
+      size={"small"}
       width={"100%"}
     />
     <div class="members-section mt-4">
