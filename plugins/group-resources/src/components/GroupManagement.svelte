@@ -101,4 +101,7 @@
     align-items: center;
     &:hover { color: var(--theme-accent-color); }
   }
+  .content {
+    margin: 2rem 3.25rem;
+  }
 </style>
