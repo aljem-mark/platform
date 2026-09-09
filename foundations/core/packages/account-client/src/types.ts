@@ -190,6 +190,28 @@ export interface UserProfile {
 export type PersonWithProfile = Person & Omit<UserProfile, 'personUuid'>
 
 /**
+ * @public
+ * Workspace-level data for a person's profile, used by client-side cross-workspace aggregation
+ */
+export interface ProfileWorkspaceProject {
+  id: string
+  name: string
+  description?: string
+}
+
+/**
+ * @public
+ */
+export interface ProfileWorkspaceData {
+  workspaceName: string
+  workspaceUrl: string
+  projects: ProfileWorkspaceProject[]
+  issuesAssigned: number
+  issuesOngoing: number
+  issuesCompleted: number
+}
+
+/**
  * Subscription status enum
  * Reflects the subscription lifecycle from active to canceled/expired
  */
