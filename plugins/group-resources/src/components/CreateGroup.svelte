@@ -4,6 +4,7 @@
   import presentation, { getClient, MessageBox } from "@hcengineering/presentation"
   import { Modal, ModernEditbox, showPopup } from "@hcengineering/ui"
   import groupPlugin, { type Group } from "@hcengineering/group"
+  import { AccountArrayEditor } from "@hcengineering/contact-resources"
 
   export let group: Group | undefined = undefined
 
@@ -12,6 +13,7 @@
 
   let name: string = group?.name ?? ""
   let description: string = group?.description ?? ""
+  let members: AccountUuid[] = group?.members ?? []
   let saving = false
   let isEdit = group != null
 
@@ -24,7 +26,8 @@
       if (isEdit && group != null) {
         await client.update(group, {
           name: name.trim(),
-          description: description.trim()
+          description: description.trim(),
+          members
         })
       } else {
         await client.createDoc(
@@ -44,6 +47,10 @@
       saving = false
       dispatch("close")
     }
+  }
+
+  function handleMembersChange (newMembers: AccountUuid[]): void {
+    members = newMembers
   }
 
   async function handleDelete (): Promise<void> {
@@ -84,11 +91,26 @@
       width={"100%"}
     />
     {#if isEdit}
-      <div class="flex-row-reverse mt-6">
-        <button class="danger-button" on:click={handleDelete}>{groupPlugin.string.DeleteGroup}</button>
+      <div class="members-section mt-4">
+        <div class="font-medium-14 mb-2">Members</div>
+        <AccountArrayEditor
+          label={groupPlugin.string.GroupMembers}
+          value={members}
+          onChange={handleMembersChange}
+          kind="link"
+          size="large"
+          allowGuests={true}
+        />
       </div>
     {/if}
   </div>
+  <svelte:fragment slot="buttons">
+    {#if isEdit}
+      <button class="danger-button" on:click={handleDelete}>
+        {groupPlugin.string.DeleteGroup}
+      </button>
+    {/if}
+  </svelte:fragment>
 </Modal>
 
 <style lang="scss">
@@ -101,9 +123,9 @@
     font-size: 0.875rem;
     cursor: pointer;
     &:hover { opacity: 0.9; }
+    margin-right: auto;
   }
-  .flex-row-reverse {
-    display: flex;
-    flex-direction: row-reverse;
-  }
+  .font-medium-14 { font-weight: 500; font-size: 0.875rem; }
+  .mb-2 { margin-bottom: 0.5rem; }
+  .mt-4 { margin-top: 1rem; }
 </style>
