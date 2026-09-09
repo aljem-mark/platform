@@ -2,9 +2,20 @@
   import { createEventDispatcher } from "svelte"
   import core, { type AccountUuid, type Ref } from "@hcengineering/core"
   import presentation, { getClient, MessageBox } from "@hcengineering/presentation"
-  import { Modal, ModernEditbox, showPopup, Button } from "@hcengineering/ui"
+  import { translate } from "@hcengineering/platform"
+  import {
+    Modal,
+    ModernEditbox,
+    showPopup,
+    Button,
+    Label,
+    addNotification,
+    NotificationSeverity,
+    themeStore
+  } from "@hcengineering/ui"
   import groupPlugin, { type Group } from "@hcengineering/group"
   import { AccountArrayEditor } from "@hcengineering/contact-resources"
+  import GroupNotification from "./GroupNotification.svelte"
 
   export let group: Group | undefined = undefined
 
@@ -18,6 +29,10 @@
   let isEdit = group != null
 
   $: canSave = name.trim().length > 0 && !saving
+
+  function errorMessage (e: any): string {
+    return (e?.message ?? "Unknown error") as string
+  }
 
   async function save (): Promise<void> {
     if (!canSave) return
@@ -36,16 +51,20 @@
           {
             name: name.trim(),
             description: description.trim(),
-            members: [] as AccountUuid[],
+            members,
             archived: false
           }
         )
       }
+      const title = await translate(groupPlugin.string.GroupCreated, {}, $themeStore.language)
+      addNotification(title, "", GroupNotification)
+      dispatch("close")
     } catch (e) {
       console.error("Failed to save group", e)
+      const title = await translate(groupPlugin.string.GroupSaveError, {}, $themeStore.language)
+      addNotification(title, errorMessage(e), GroupNotification, undefined, NotificationSeverity.Error)
     } finally {
       saving = false
-      dispatch("close")
     }
   }
 
@@ -57,11 +76,20 @@
     if (group == null) return
     showPopup(MessageBox, {
       label: groupPlugin.string.DeleteGroup,
-      message: "Delete " + group.name + "?",
+      message: groupPlugin.string.DeleteGroupConfirm,
+      params: { name: group.name },
       dangerous: true,
       action: async () => {
-        await client.removeDoc(groupPlugin.class.Group, group.space, group._id)
-        dispatch("close")
+        try {
+          await client.removeDoc(groupPlugin.class.Group, group.space, group._id)
+          const title = await translate(groupPlugin.string.GroupDeleted, {}, $themeStore.language)
+          addNotification(title, "", GroupNotification)
+          dispatch("close")
+        } catch (e) {
+          console.error("Failed to delete group", e)
+          const title = await translate(groupPlugin.string.GroupDeleteError, {}, $themeStore.language)
+          addNotification(title, errorMessage(e), GroupNotification, undefined, NotificationSeverity.Error)
+        }
       }
     })
   }
@@ -90,13 +118,15 @@
       size={"small"}
       width={"100%"}
     />
-    <div class="members-section mt-4">
-      <div class="font-medium-14 mb-2">Members</div>
+    <div class="members-section">
+      <div class="members-caption">
+        <Label label={groupPlugin.string.GroupMembers} />
+      </div>
       <AccountArrayEditor
         label={groupPlugin.string.GroupMembers}
         value={members}
         onChange={handleMembersChange}
-        kind="link"
+        kind="regular"
         size="large"
         allowGuests={false}
       />
@@ -115,7 +145,17 @@
   .delete-section {
     margin-right: auto;
   }
-  .font-medium-14 { font-weight: 500; font-size: 0.875rem; }
-  .mb-2 { margin-bottom: 0.5rem; }
-  .mt-4 { margin-top: 1rem; }
+  .members-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding-left: var(--spacing-2);
+  }
+  .members-caption {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--theme-caption-color);
+    line-height: 1.2;
+  }
 </style>

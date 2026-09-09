@@ -16,6 +16,11 @@
     "GroupNamePlaceholder": "Enter group name",
     "GroupDescriptionPlaceholder": "Enter group description",
     "DefaultGroup": "Default Group",
-    "EffectiveMembers": "Effective Members"
+    "EffectiveMembers": "Effective Members",
+    "GroupCreated": "Group created successfully",
+    "GroupDeleted": "Group deleted successfully",
+    "GroupSaveError": "Failed to save group",
+    "GroupDeleteError": "Failed to delete group",
+    "DeleteGroupConfirm": "Delete {name}?"
   }
 }

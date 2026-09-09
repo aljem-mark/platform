@@ -28,7 +28,12 @@ const groupPlugin = plugin(groupId, {
     ArchiveGroup: "" as IntlString, Archived: "" as IntlString,
     NoGroups: "" as IntlString, GroupNamePlaceholder: "" as IntlString,
     GroupDescriptionPlaceholder: "" as IntlString, DefaultGroup: "" as IntlString,
-    EffectiveMembers: "" as IntlString
+    EffectiveMembers: "" as IntlString,
+    GroupCreated: "" as IntlString,
+    GroupDeleted: "" as IntlString,
+    GroupSaveError: "" as IntlString,
+    GroupDeleteError: "" as IntlString,
+    DeleteGroupConfirm: "" as IntlString
   }
 })
 export default groupPlugin
