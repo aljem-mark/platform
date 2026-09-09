@@ -65,8 +65,7 @@ export const workbenchPlugin = plugin(workbenchId, {
     OpenInSidebarNewTab: '' as IntlString,
     ConfigureWidgets: '' as IntlString,
     WorkspaceIsArchived: '' as IntlString,
-    WorkspaceIsMigrating: '' as IntlString,
-    ViewMyProfile: '' as IntlString
+    WorkspaceIsMigrating: '' as IntlString
   },
   icon: {
     Search: '' as Asset

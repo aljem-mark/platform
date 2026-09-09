@@ -26,19 +26,13 @@
     Label,
     TooltipInstance,
     getLocation as getPlatformLocation,
-    Loading,
-    navigate
+    Loading
   } from '@hcengineering/ui'
-  import { type ProfileWorkspaceData, PersonWithProfile } from '@hcengineering/account-client'
-  import core, { type AccountUuid, type PersonUuid } from '@hcengineering/core'
+  import { PersonWithProfile } from '@hcengineering/account-client'
+  import { type AccountUuid, type PersonUuid } from '@hcengineering/core'
   import globalProfile from '@hcengineering/global-profile'
   import view from '@hcengineering/view'
-  import { getMetadata, getResource } from '@hcengineering/platform'
-  import client from '@hcengineering/client'
-  import task from '@hcengineering/task'
-  import tracker, { trackerId } from '@hcengineering/tracker'
-  import { workbenchId } from '@hcengineering/workbench'
-  import contact from '@hcengineering/contact'
+  import { getMetadata } from '@hcengineering/platform'
 
   import { getAvatarText, getDisplayName, getLocation, getAccountClient, getAvatarColorForId } from '../utils'
   import EditProfilePopup from './EditGlobalProfilePopup.svelte'
@@ -48,7 +42,6 @@
   const userId = loc.path[1] as PersonUuid
   const accountClient = getAccountClient()
   let myAccount: AccountUuid | null = null
-  let workspaceData: ProfileWorkspaceData[] = []
   let loading: boolean = false
   $: isMyProfile = myAccount != null && userId === myAccount
 
@@ -76,57 +69,6 @@
       }
 
       profile = await accountClient.getUserProfile(userId)
-
-      // Client-side cross-workspace aggregation
-      try {
-        const workspaces = await accountClient.getUserWorkspaces()
-        const clientFactory = await getResource(client.function.GetClient)
-        const accountUuid = userId as unknown as AccountUuid
-
-        for (const ws of workspaces) {
-          try {
-            const loginInfo = await accountClient.selectWorkspace(ws.url)
-            const wsClient = await clientFactory(loginInfo.token, loginInfo.endpoint)
-
-            const [projects, person, allStatuses] = await Promise.all([
-              wsClient.findAll(task.class.Project, { members: accountUuid }),
-              wsClient.findOne(contact.class.Person, { personUuid: userId }),
-              wsClient.findAll(core.class.Status, {})
-            ])
-
-            const ongoingStatusIds = allStatuses
-              .filter((s: any) => s.category === task.statusCategory.Active || s.category === task.statusCategory.ToDo)
-              .map((s: any) => s._id)
-            const doneStatusIds = allStatuses
-              .filter((s: any) => s.category === task.statusCategory.Won)
-              .map((s: any) => s._id)
-
-            const allIssues = person != null
-              ? await wsClient.findAll(tracker.class.Issue, { assignee: person._id })
-              : []
-
-            await wsClient.close()
-
-            workspaceData = [...workspaceData, {
-              workspaceName: ws.name,
-              workspaceUrl: ws.url,
-              projects: projects.map((p: any) => ({
-                id: p._id,
-                name: (p as any).name ?? '',
-                description: (p as any).description ?? ''
-              })),
-              issuesAssigned: allIssues.length,
-              issuesOngoing: allIssues.filter((i: any) => ongoingStatusIds.includes(i.status)).length,
-              issuesCompleted: allIssues.filter((i: any) => doneStatusIds.includes(i.status)).length
-            }]
-          } catch (e) {
-            console.error('Failed to load workspace data for', ws.url, e)
-            // Skip failed workspaces
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load workspace list', e)
-      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -231,43 +173,6 @@
           </div>
         {/if}
       </div>
-      {#if workspaceData.length > 0}
-        {#each workspaceData as ws}
-          <div class="workspace-section">
-            <div class="workspace-header">{ws.workspaceName}</div>
-            <div class="section-title">Projects</div>
-            {#if ws.projects.length === 0}
-              <div class="empty-text">No projects found</div>
-            {:else}
-              <div class="projects-list">
-                {#each ws.projects as p}
-                  <div class="project-item" on:click={() => navigate({ path: [workbenchId, ws.workspaceUrl, trackerId, p.id] })}>{p.name}</div>
-                {/each}
-              </div>
-            {/if}
-            <div class="section-title">Stats</div>
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-count">{ws.issuesAssigned}</div>
-                <div class="stat-label">Issues Assigned</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-count">{ws.issuesOngoing}</div>
-                <div class="stat-label">Ongoing</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-count">{ws.issuesCompleted}</div>
-                <div class="stat-label">Completed</div>
-              </div>
-            </div>
-          </div>
-        {/each}
-      {:else}
-        <div class="empty-section">
-          <div class="empty-text">No workspace data available</div>
-        </div>
-      {/if}
-
       <div class="avatarCtr">
         <div class="avatar" style:background-color={avatarColor.icon}>
           <div class="avatarText" style:color={avatarColor.iconText} data-name={avatarName.toLocaleUpperCase()} />
@@ -436,86 +341,6 @@
         text-decoration: underline;
       }
     }
-  }
-
-  .workspace-section {
-    padding: 1.5rem;
-    margin-top: 2rem;
-    border-top: 1px solid var(--theme-divider-color);
-  }
-
-    .workspace-section:last-of-type {
-    padding-bottom: 4rem;
-  }
-
-  .workspace-header {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--theme-caption-color);
-    margin-bottom: 1rem;
-  }
-
-  .section-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--theme-content-color);
-    margin: 0.75rem 0 0.5rem 0;
-  }
-
-  .empty-text {
-    color: var(--theme-text-placeholder-color);
-    font-style: italic;
-    font-size: 0.875rem;
-  }
-
-  .projects-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .project-item {
-    background: var(--theme-button-default);
-    border: 1px solid var(--theme-divider-color);
-    border-radius: 0.5rem;
-    padding: 0.75rem 1rem;
-    color: var(--theme-caption-color);
-    font-weight: 500;
-    font-size: 0.875rem;
-    cursor: pointer;
-  }
-
-  .project-item:hover {
-    background: var(--theme-button-hovered);
-  }
-
-  .stats-grid {
-    display: flex;
-    gap: 1rem;
-  }
-
-  .stat-card {
-    flex: 1;
-    background: var(--theme-button-default);
-    border: 1px solid var(--theme-divider-color);
-    border-radius: 0.5rem;
-    padding: 1rem 1.5rem;
-    text-align: center;
-    min-height: 5rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .stat-count {
-    font-size: 1.75rem;
-    font-weight: 600;
-    color: var(--theme-caption-color);
-  }
-
-  .stat-label {
-    font-size: 0.875rem;
-    color: var(--theme-content-color);
   }
 
   .location {
