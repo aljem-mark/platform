@@ -160,6 +160,32 @@
     }
   }
 
+  async function mergeGroupMembers (
+    projectMembers: AccountUuid[],
+    groupRef: Ref<Group> | undefined,
+    groups: Group[]
+  ): Promise<{ members: AccountUuid[], changed: boolean }> {
+    if (groupRef === undefined) {
+      return { members: projectMembers, changed: false }
+    }
+    let group = groups.find((g) => g._id === groupRef)
+    if (group === undefined) {
+      group = await client.findOne(groupPlugin.class.Group, { _id: groupRef })
+    }
+    if (group === undefined) {
+      return { members: projectMembers, changed: false }
+    }
+    const merged = [...projectMembers]
+    let changed = false
+    for (const member of group.members) {
+      if (merged.findIndex((m) => m === member) === -1) {
+        merged.push(member)
+        changed = true
+      }
+    }
+    return { members: merged, changed }
+  }
+
   function getRolesAssignment (): RolesAssignment {
     if (project === undefined || typeType?.targetClass === undefined || roles === undefined) {
       return {}
@@ -180,6 +206,13 @@
     }
 
     const { sequence, ...projectData } = getProjectData()
+    // Merge the (possibly new) default group's members into the project's
+    // member set, additively and deduped (additive-only per design: never
+    // removes existing members on group change/clear).
+    if (projectData.defaultGroup !== project?.defaultGroup) {
+      const merged = await mergeGroupMembers(projectData.members, projectData.defaultGroup, allGroups)
+      projectData.members = merged.members
+    }
     const update: DocumentUpdate<Project> = {}
     if (projectData.name !== project?.name) {
       update.name = projectData.name
@@ -290,6 +323,12 @@
   async function createProject (): Promise<void> {
     const projectId = generateId<Project>()
     const projectData = getProjectData()
+    // Additively merge the default group's members into the new project's
+    // member set, deduped (additive-only per design).
+    if (projectData.defaultGroup !== undefined) {
+      const merged = await mergeGroupMembers(projectData.members, projectData.defaultGroup, allGroups)
+      projectData.members = merged.members
+    }
     if (typeId !== undefined && typeType !== undefined) {
       const ops = client
         .apply('create-project')

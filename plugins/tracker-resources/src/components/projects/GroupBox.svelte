@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type Ref } from '@hcengineering/core'
   import { type Group } from '@hcengineering/group'
-  import { showPopup, SelectPopup, Label } from '@hcengineering/ui'
+  import { showPopup, SelectPopup, Label, eventToHTMLElement } from '@hcengineering/ui'
   import { type IntlString } from '@hcengineering/platform'
 
   export let value: Ref<Group> | undefined
@@ -12,7 +12,7 @@
   export let placeholder: IntlString = '' as IntlString
   export let showTooltip: any = undefined
 
-  let selectedGroup = value != null ? groups.find(t => t._id === value) : undefined
+  $: selectedGroup = value != null ? groups.find(t => t._id === value) : undefined
 
   function handleSelect (evt: MouseEvent): void {
     showPopup(
@@ -27,15 +27,12 @@
           }))
         ]
       },
-      'top',
-      (result?: { id: string | number | null }) => {
-        if (result !== undefined && result.id !== undefined) {
-          const groupId = result.id as string
-          value = groupId === "" ? undefined : groupId as unknown as Ref<Group>
-          selectedGroup = value != null ? groups.find(t => t._id === value) : undefined
-          if (selectedGroup == null && value != null) {
-            value = undefined
-          }
+      eventToHTMLElement(evt),
+      (result?: string | number | null) => {
+        if (result === '') {
+          value = undefined
+        } else if (result != null) {
+          value = result as unknown as Ref<Group>
         }
       }
     )
@@ -59,7 +56,7 @@
     border-radius: 0.25rem;
     cursor: pointer;
     min-height: 2.5rem;
-    background: var(--theme-bg-color);
+    background-color: var(--theme-button-default);
   }
   .group-box-wrapper:hover {
     border-color: var(--theme-button-hovered);
