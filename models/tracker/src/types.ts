@@ -47,6 +47,7 @@ import {
   TypeRecord,
   TypeRef,
   TypeString,
+  TypeBoolean,
   UX
 } from '@hcengineering/model'
 import attachment from '@hcengineering/model-attachment'
@@ -55,6 +56,7 @@ import notification, { TCommonInboxNotification } from '@hcengineering/model-not
 import task, { TTask, TProject as TTaskProject } from '@hcengineering/model-task'
 import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
 import tags, { type TagElement } from '@hcengineering/tags'
+import groupPlugin, { type Group } from '@hcengineering/group'
 import time, { type ToDo } from '@hcengineering/time'
 import {
   type ProjectTargetPreference,
@@ -138,6 +140,9 @@ export class TProject extends TTaskProject implements Project {
   @Prop(TypeRef(contact.mixin.Employee), tracker.string.DefaultAssignee)
     defaultAssignee!: Ref<Employee>
 
+  @Prop(TypeRef(groupPlugin.class.Group), tracker.string.DefaultGroup)
+    defaultGroup?: Ref<Group>
+
   declare defaultTimeReportDay: TimeReportDayType
 
   @Prop(Collection(tracker.class.RelatedIssueTarget), tracker.string.RelatedIssues)
@@ -146,6 +151,28 @@ export class TProject extends TTaskProject implements Project {
   @Prop(TypeRecord(), tracker.string.WorkingDaysConfig)
     workingDaysConfig?: WorkingDaysConfig
 }
+
+/**
+ * @public
+ */
+
+@Model(groupPlugin.class.Group, core.class.Doc, DOMAIN_TRACKER)
+@UX(tracker.string.Group, tracker.icon.Home, 'Group', 'name')
+export class TGroup extends TDoc implements Group {
+  @Prop(TypeString(), tracker.string.GroupName)
+  @Index(IndexKind.FullText)
+    name!: string
+
+  @Prop(TypeString(), tracker.string.GroupDescription)
+  @Index(IndexKind.FullText)
+    description!: string
+
+  members!: AccountUuid[]
+
+  @Prop(TypeBoolean(), tracker.string.Archived)
+    archived!: boolean
+}
+
 /**
  * @public
  */

@@ -56,12 +56,15 @@
   import view from '@hcengineering/view'
   import { IconPicker } from '@hcengineering/view-resources'
   import { deepEqual } from 'fast-equals'
-  import { createEventDispatcher } from 'svelte'
+  import { onMount, createEventDispatcher } from 'svelte'
 
   import tracker from '../../plugin'
+  import groupPlugin, { type Group } from '@hcengineering/group'
   import StatusSelector from '../issues/StatusSelector.svelte'
   import { workingDaysUpdate } from '../gantt/lib/working-days-editor'
   import WorkingDaysEditor from './WorkingDaysEditor.svelte'
+  import GroupBox from './GroupBox.svelte'
+  import { Loading } from '@hcengineering/ui'
 
   export let project: Project | undefined = undefined
   export let namePlaceholder: string = ''
@@ -78,6 +81,9 @@
   let color = project?.color ?? getColorNumberByText(name)
   let isColorSelected = false
   let defaultAssignee: Ref<Employee> | null | undefined = project?.defaultAssignee ?? null
+  let defaultGroup: Ref<Group> | undefined = project?.defaultGroup
+  let allGroups: Group[] = []
+  let groupLoading = true
   let members: AccountUuid[] =
     project?.members !== undefined ? hierarchy.clone(project.members) : [getCurrentAccount().uuid]
   let owners: AccountUuid[] =
@@ -87,6 +93,13 @@
   let defaultStatus: Ref<IssueStatus> | undefined = project?.defaultIssueStatus
   // Flat copy: the editor mutates the object; the query-cache doc stays
   // untouched until save.
+  onMount(async () => {
+    try {
+      allGroups = await client.findAll(groupPlugin.class.Group, { archived: { $ne: true } })
+    } catch (e) { console.error(e) }
+    finally { groupLoading = false }
+  })
+
   let workingDaysConfig: WorkingDaysConfig | undefined =
     project?.workingDaysConfig !== undefined ? { ...project.workingDaysConfig } : undefined
   let rolesAssignment: RolesAssignment | undefined
@@ -137,6 +150,7 @@
       identifier: identifier.toUpperCase(),
       sequence: 0,
       defaultAssignee: defaultAssignee ?? undefined,
+      defaultGroup: defaultGroup,
       icon,
       color,
       defaultIssueStatus: defaultStatus ?? ('' as Ref<IssueStatus>),
@@ -144,6 +158,32 @@
       workingDaysConfig,
       autoJoinForRoles: normalizeAutoJoinForRoles(autoJoinForRoles)
     }
+  }
+
+  async function mergeGroupMembers (
+    projectMembers: AccountUuid[],
+    groupRef: Ref<Group> | undefined,
+    groups: Group[]
+  ): Promise<{ members: AccountUuid[], changed: boolean }> {
+    if (groupRef === undefined) {
+      return { members: projectMembers, changed: false }
+    }
+    let group = groups.find((g) => g._id === groupRef)
+    if (group === undefined) {
+      group = await client.findOne(groupPlugin.class.Group, { _id: groupRef })
+    }
+    if (group === undefined) {
+      return { members: projectMembers, changed: false }
+    }
+    const merged = [...projectMembers]
+    let changed = false
+    for (const member of group.members) {
+      if (merged.findIndex((m) => m === member) === -1) {
+        merged.push(member)
+        changed = true
+      }
+    }
+    return { members: merged, changed }
   }
 
   function getRolesAssignment (): RolesAssignment {
@@ -166,6 +206,13 @@
     }
 
     const { sequence, ...projectData } = getProjectData()
+    // Merge the (possibly new) default group's members into the project's
+    // member set, additively and deduped (additive-only per design: never
+    // removes existing members on group change/clear).
+    if (projectData.defaultGroup !== project?.defaultGroup) {
+      const merged = await mergeGroupMembers(projectData.members, projectData.defaultGroup, allGroups)
+      projectData.members = merged.members
+    }
     const update: DocumentUpdate<Project> = {}
     if (projectData.name !== project?.name) {
       update.name = projectData.name
@@ -175,6 +222,9 @@
     }
     if (projectData.private !== project?.private) {
       update.private = projectData.private
+    }
+    if (projectData.defaultGroup !== project?.defaultGroup) {
+      update.defaultGroup = projectData.defaultGroup
     }
     if (projectData.defaultAssignee !== project?.defaultAssignee) {
       update.defaultAssignee = projectData.defaultAssignee
@@ -273,6 +323,12 @@
   async function createProject (): Promise<void> {
     const projectId = generateId<Project>()
     const projectData = getProjectData()
+    // Additively merge the default group's members into the new project's
+    // member set, deduped (additive-only per design).
+    if (projectData.defaultGroup !== undefined) {
+      const merged = await mergeGroupMembers(projectData.members, projectData.defaultGroup, allGroups)
+      projectData.members = merged.members
+    }
     if (typeId !== undefined && typeType !== undefined) {
       const ops = client
         .apply('create-project')
@@ -514,6 +570,24 @@
         showNavigate={false}
         showTooltip={{ label: tracker.string.DefaultAssignee }}
       />
+    </div>
+    <div class="antiGrid-row">
+      <div class="antiGrid-row__header">
+        <Label label={tracker.string.DefaultGroup} />
+      </div>
+      {#if groupLoading}
+        <Loading />
+      {:else}
+        <GroupBox
+          label={tracker.string.DefaultGroup}
+          placeholder={tracker.string.DefaultGroup}
+          kind={'regular'}
+          size={'large'}
+          bind:value={defaultGroup}
+          groups={allGroups}
+          showTooltip={{ label: tracker.string.DefaultGroup }}
+        />
+      {/if}
     </div>
     <div class="antiGrid-row">
       <div class="antiGrid-row__header">

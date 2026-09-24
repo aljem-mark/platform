@@ -1322,7 +1322,19 @@
     },
     {
       "packageName": "@hcengineering/tags-resources",
-      "projectFolder": "plugins/tags-resources",
+      "projectFolder": "plugins/tags-resources"
+    },
+    {
+      "packageName": "@hcengineering/group",
+      "projectFolder": "plugins/group"
+    },
+    {
+      "packageName": "@hcengineering/group-assets",
+      "projectFolder": "plugins/group-assets"
+    },
+    {
+      "packageName": "@hcengineering/group-resources",
+      "projectFolder": "plugins/group-resources",
       "shouldPublish": false
     },
     {

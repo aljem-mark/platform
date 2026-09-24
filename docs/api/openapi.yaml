@@ -1,0 +1,741 @@
+openapi: 3.0.3
+info:
+  title: we-did-work Backend REST API
+  version: 1.0.0
+  license:
+    name: EPL-2.0
+    url: https://www.eclipse.org/legal/epl-2.0
+  description: |
+    Token-authenticated REST API exposed by the we-did-work backend. It is the
+    same surface the SPA and desktop client use internally, and is the primary
+    way for external applications/websites to read and write workspace data.
+
+    The workspace data API is **model-driven**: `find-all` requires a `_class`
+    reference that must resolve in the workspace's domain hierarchy, and writes
+    are expressed as internal `Tx` objects. Load the model first
+    (`GET /api/v1/load-model/:workspaceId`) to discover valid classes, then use
+    `find-all` to query and `tx` to mutate.
+
+    See `docs/api/README.md` for the full guide (token creation, the
+    class/domain/model system, Tx format, and worked examples).
+servers:
+  - url: https://{host}
+    variables:
+      host:
+        default: huly.local:8087
+        description: Backend host. In local dev the front server serves the SPA
+          and the API is reachable on the same origin.
+tags:
+  - name: Workspace Data
+    description: Read/write workspace documents (model-driven).
+  - name: Server Ops
+    description: Server-level operational endpoints (version, health, stats).
+  - name: Account
+    description: Account and token management.
+  - name: Files
+    description: Blob/file storage.
+paths:
+  /api/v1/ping/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Ping the workspace session
+      operationId: ping
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Workspace session is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pong:
+                    type: boolean
+                    example: true
+                  lastTx:
+                    type: integer
+                  lastHash:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/find-all/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Find documents of a class (query via query string)
+      operationId: findAllGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: class
+          in: query
+          required: true
+          description: Ref to a Class<Doc> that resolves in the workspace hierarchy.
+          schema:
+            type: string
+            example: tracker:class:Issue
+        - name: query
+          in: query
+          description: JSON-encoded DocumentQuery.
+          schema:
+            type: string
+            example: '{"space":"tracker:space:DefaultProject"}'
+        - name: options
+          in: query
+          description: JSON-encoded FindOptions.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Result limit (overrides options.limit).
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Array of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '404':
+          description: Invalid class name (not resolvable in the hierarchy)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Workspace Data]
+      summary: Find documents of a class (query via JSON body)
+      operationId: findAllPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [_class]
+              properties:
+                _class:
+                  type: string
+                  description: Ref to a Class<Doc>.
+                query:
+                  type: object
+                  description: DocumentQuery.
+                options:
+                  type: object
+                  description: FindOptions (limit, sort, etc.).
+      responses:
+        '200':
+          description: Array of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/tx/{workspaceId}:
+    post:
+      tags: [Workspace Data]
+      summary: Apply a transaction (create/update/remove/collection)
+      operationId: tx
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        description: A single Tx object (TxCUD or TxDomainEvent).
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Internal Tx format. See docs/api/README.md.
+      responses:
+        '200':
+          description: Transaction result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid tx
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/event/{workspaceId}:
+    post:
+      tags: [Workspace Data]
+      summary: Domain event request (deprecated)
+      description: Deprecated. Use /api/v1/tx/:workspaceId instead.
+      deprecated: true
+      operationId: domainEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Domain event result
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/account/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Get the current account for the session
+      operationId: account
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Current account info
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/load-model/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Load the workspace model (hierarchy txes)
+      operationId: loadModel
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: lastModelTx
+          in: query
+          description: Only return txes after this model tx id.
+          schema:
+            type: integer
+        - name: lastHash
+          in: query
+          description: Only return txes after this model hash.
+          schema:
+            type: string
+        - name: full
+          in: query
+          description: 'If "true", return all txes; otherwise only hierarchy-related ones.'
+          schema:
+            type: string
+            enum: ['true', 'false']
+      responses:
+        '200':
+          description: Model txes (array)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/search-fulltext/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Full-text search across classes/spaces
+      operationId: searchFulltext
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: classes
+          in: query
+          description: JSON-encoded array of class refs.
+          schema:
+            type: string
+        - name: spaces
+          in: query
+          description: JSON-encoded array of space refs.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/request/{domain}/{operation}/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Domain RPC (operation in path)
+      operationId: domainRequestGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: operation
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: params
+          in: query
+          description: JSON-encoded params.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Domain operation result
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/request/{domain}/{workspaceId}:
+    post:
+      tags: [Workspace Data]
+      summary: Domain RPC (params in body)
+      operationId: domainRequestPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Domain operation result
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/ensure-person/{workspaceId}:
+    post:
+      tags: [Workspace Data]
+      summary: Ensure a person + social identity exist
+      operationId: ensurePerson
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                socialType:
+                  type: string
+                socialValue:
+                  type: string
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+      responses:
+        '200':
+          description: Created/resolved person
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uuid:
+                    type: string
+                  socialId:
+                    type: string
+                  localPerson:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/generate-id/{workspaceId}:
+    get:
+      tags: [Workspace Data]
+      summary: Generate a fresh document id
+      operationId: generateId
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: New id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/version:
+    get:
+      tags: [Server Ops]
+      summary: Server model version
+      operationId: version
+      security: []
+      responses:
+        '200':
+          description: Version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+        '500':
+          description: Server error
+        '400':
+          description: Bad request
+  /api/v1/health:
+    get:
+      tags: [Server Ops]
+      summary: Server health
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+        '503':
+          description: Unhealthy
+        '404':
+          description: Not found
+  /api/v1/statistics:
+    get:
+      tags: [Server Ops]
+      summary: Server statistics (admin)
+      operationId: statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Invalid token
+  /api/v1/profiling:
+    get:
+      tags: [Server Ops]
+      summary: Profiling data (admin)
+      operationId: profiling
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profiling
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Invalid token
+  /api/v1/manage:
+    put:
+      tags: [Server Ops]
+      summary: Server management command (admin)
+      operationId: manage
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Management result
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/broadcast:
+    put:
+      tags: [Server Ops]
+      summary: Broadcast a message (admin)
+      operationId: broadcast
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Broadcast result
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /cookie:
+    put:
+      tags: [Account]
+      summary: Set auth cookie
+      operationId: setCookie
+      security: []
+      responses:
+        '200':
+          description: Cookie set
+        '400':
+          description: Bad request
+    delete:
+      tags: [Account]
+      summary: Clear auth cookie
+      operationId: clearCookie
+      security: []
+      responses:
+        '200':
+          description: Cookie cleared
+        '400':
+          description: Bad request
+  /:
+    post:
+      tags: [Account]
+      summary: Account RPC (AccountMethods)
+      operationId: accountRpc
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Account RPC result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Bad request
+  /files:
+    get:
+      tags: [Files]
+      summary: Get a file
+      operationId: getFile
+      security: []
+      responses:
+        '200':
+          description: File content
+        '404':
+          description: Not found
+    post:
+      tags: [Files]
+      summary: Upload a file
+      operationId: uploadFile
+      security: []
+      responses:
+        '200':
+          description: Upload result
+        '400':
+          description: Bad request
+  /files/{path}:
+    get:
+      tags: [Files]
+      summary: Get a file (path)
+      operationId: getFilePath
+      security: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+        '404':
+          description: Not found
+    post:
+      tags: [Files]
+      summary: Upload a file (path)
+      operationId: uploadFilePath
+      security: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Upload result
+        '400':
+          description: Bad request
+    delete:
+      tags: [Files]
+      summary: Delete a file (path)
+      operationId: deleteFilePath
+      security: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+        '404':
+          description: Not found
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        API token minted in-app via Settings -> API Tokens. Sent as
+        `Authorization: Bearer <token>`. The token encodes a workspace; requests
+        whose :workspaceId does not match the token's workspace are rejected
+        with 403.
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      description: URL-encoded workspace id bound to the token.
+      schema:
+        type: string
+  schemas:
+    ErrorBody:
+      type: object
+      properties:
+        message:
+          type: string
+        error:
+          type: object
+          description: PlatformError Status shape.
+        workspace:
+          type: string
+  responses:
+    Unauthorized:
+      description: Missing, invalid, expired, or revoked token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    Forbidden:
+      description: Workspace mismatch or insufficient permission.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    RateLimited:
+      description: Rate limit exceeded. Includes X-RateLimit-* and Retry-After headers.
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object

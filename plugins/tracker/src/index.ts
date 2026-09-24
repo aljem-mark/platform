@@ -116,6 +116,7 @@ export interface Project extends TaskProject, IconProps {
   sequence: number
   defaultIssueStatus?: Ref<IssueStatus>
   defaultAssignee?: Ref<Employee>
+  defaultGroup?: Ref<Group>
   defaultTimeReportDay: TimeReportDayType
   /**
    * Optional Gantt working-days calendar. See {@link WorkingDaysConfig}.
@@ -567,6 +568,7 @@ export * from './analytics'
 
 const pluginState = plugin(trackerId, {
   class: {
+    Group: '' as Ref<Class<Group>>,
     Project: '' as Ref<Class<Project>>,
     Issue: '' as Ref<Class<Issue>>,
     IssueRelation: '' as Ref<Class<IssueRelation>>,
@@ -761,6 +763,11 @@ const pluginState = plugin(trackerId, {
     GanttAriaResizeEnd: '' as IntlString,
     GanttDependency: '' as IntlString,
     GanttLag: '' as IntlString,
+    Group: '' as IntlString,
+    Archived: '' as IntlString,
+    GroupName: '' as IntlString,
+    GroupDescription: '' as IntlString,
+    GroupMembers: '' as IntlString, DefaultGroup: '' as IntlString,
     WorkingDaysConfig: '' as IntlString,
     WorkingDaysTitle: '' as IntlString,
     WorkingDaysDescription: '' as IntlString,
@@ -844,3 +851,5 @@ export function createStatesData (data: TaskStatusFactory[]): Omit<Data<Status>,
   }
   return states
 }
+
+import { type Group } from "@hcengineering/group"
