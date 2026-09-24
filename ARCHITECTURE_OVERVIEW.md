@@ -1,5 +1,7 @@
 # Huly Platform Architecture Overview
 
+> **API documentation:** the backend REST API reference lives in [`docs/api/`](./docs/api/README.md) (OpenAPI spec + guide; interactive Swagger UI at `/api/docs` on the front server).
+
 ## Service Overview
 
 The Huly platform consists of **30+ microservices** working together in a distributed architecture. Services are organized into functional layers for core business logic, data storage, real-time communication, media processing, and supporting features.

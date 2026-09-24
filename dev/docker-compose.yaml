@@ -270,6 +270,7 @@ services:
     environment:
       - SERVER_PORT=8080
       - SERVER_SECRET=secret
+      - DOC_MODE=safe
       - ACCOUNTS_URL=http://huly.local:3000
       - STATS_URL=http://huly.local:4900
       - FILES_URL=http://huly.local:4030/blob/:workspace/:blobId/:filename

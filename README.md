@@ -63,6 +63,8 @@ The Huly Platform uses two types of version tags to distinguish between producti
 
 For detailed information about the platform architecture, services, and their interactions, see our [Architecture Overview](./ARCHITECTURE_OVERVIEW.md).
 
+For the backend REST API reference (OpenAPI spec + guide), see [docs/api/](./docs/api/README.md).
+
 ## Table of Contents
 
 - [Huly Platform](#huly-platform)
