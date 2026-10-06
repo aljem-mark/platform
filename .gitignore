@@ -103,6 +103,7 @@ services/github/pod-github/src/github.graphql
 dev/tool/report.csv
 bundle/*
 bundle.js.map
+**/bundle/openapi*.yaml
 tests/profiles
 **/bundle/model.json
 .wrangler

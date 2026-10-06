@@ -366,6 +366,61 @@ export function start (
     res.json(data)
   })
 
+  // OpenAPI spec + Swagger UI viewer for the REST API.
+  // Static reference only: no tokens, workspace ids, or runtime secrets.
+  // Fail-closed, mode-based gate (DOC_MODE):
+  //   off (unset/any other value) -> both routes 404
+  //   safe -> pruned consumer spec (openapi-safe.yaml)
+  //   all  -> full internal spec (openapi.yaml)
+  // See docs/api/README.md, "Serving the spec".
+  const docMode = process.env.DOC_MODE
+  const docSpecPath =
+    docMode === 'safe'
+      ? resolve(join(cwd(), 'docs/api/openapi-safe.yaml'))
+      : docMode === 'all'
+        ? resolve(join(cwd(), 'docs/api/openapi.yaml'))
+        : undefined
+  const docsEnabled = docSpecPath !== undefined
+  const swaggerUiHtml = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>we-did-work API Reference</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.onload = function () {
+        window.ui = SwaggerUIBundle({
+          url: '/api/openapi.yaml',
+          dom_id: '#swagger-ui',
+          deepLinking: true
+        })
+      }
+    </script>
+  </body>
+</html>`
+  app.get('/api/openapi.yaml', (_req, res) => {
+    if (!docsEnabled || docSpecPath === undefined) {
+      res.status(404).send()
+      return
+    }
+    res.set('Content-Type', 'application/yaml')
+    res.set('Cache-Control', cacheControlNoCache)
+    res.sendFile(docSpecPath)
+  })
+  app.get('/api/docs', (_req, res) => {
+    if (!docsEnabled) {
+      res.status(404).send()
+      return
+    }
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.set('Cache-Control', cacheControlNoCache)
+    res.send(swaggerUiHtml)
+  })
+
   app.get('/api/v1/statistics', (req, res) => {
     try {
       const token = req.query.token as string
