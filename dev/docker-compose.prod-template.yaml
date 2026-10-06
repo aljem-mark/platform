@@ -41,11 +41,21 @@ services:
       - REKONI_URL=https://REPLACE_ME_DOMAIN/rekoni
       - DATALAKE_URL=https://REPLACE_ME_DOMAIN/datalake
       - STREAM_URL=https://REPLACE_ME_DOMAIN/stream/recording
-      # --- remaining browser-facing vars (must not leak internal huly.local URLs) ---
-      - PREVIEW_URL=https://REPLACE_ME_DOMAIN/preview
-      - LINK_PREVIEW_URL=https://REPLACE_ME_DOMAIN/link-preview
-      - PULSE_URL=wss://REPLACE_ME_DOMAIN/pulse/ws
-      - HULYLAKE_URL=https://REPLACE_ME_DOMAIN/hulylake
+      # --- remaining browser-facing vars: blanked by default ---
+      # A URL must only be set for a service that is actually running.
+      # preview/link-preview/hulypulse are `profiles: ["full"]` in
+      # dev/docker-compose.min.yaml, so they do NOT start under the default
+      # `-f docker-compose.yaml -f docker-compose.min.yaml up` (no --profile full).
+      # Blank = the client disables the feature instead of fetching a dead path.
+      # If you deploy with `--profile full`, set these instead:
+      #   PREVIEW_URL=https://REPLACE_ME_DOMAIN/preview
+      #   LINK_PREVIEW_URL=https://REPLACE_ME_DOMAIN/link-preview
+      #   PULSE_URL=wss://REPLACE_ME_DOMAIN/pulse/ws
+      #   HULYLAKE_URL=https://REPLACE_ME_DOMAIN/hulylake   (hulylake has no profile -> always runs)
+      - PREVIEW_URL=
+      - LINK_PREVIEW_URL=
+      - PULSE_URL=
+      - HULYLAKE_URL=
       # Integrations with no service in this stack: empty disables them client-side.
       - GMAIL_URL=
       - CALENDAR_URL=
