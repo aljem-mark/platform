@@ -41,6 +41,20 @@ services:
       - REKONI_URL=https://REPLACE_ME_DOMAIN/rekoni
       - DATALAKE_URL=https://REPLACE_ME_DOMAIN/datalake
       - STREAM_URL=https://REPLACE_ME_DOMAIN/stream/recording
+      # --- remaining browser-facing vars (must not leak internal huly.local URLs) ---
+      - PREVIEW_URL=https://REPLACE_ME_DOMAIN/preview
+      - LINK_PREVIEW_URL=https://REPLACE_ME_DOMAIN/link-preview
+      - PULSE_URL=wss://REPLACE_ME_DOMAIN/pulse/ws
+      - HULYLAKE_URL=https://REPLACE_ME_DOMAIN/hulylake
+      # Integrations with no service in this stack: empty disables them client-side.
+      - GMAIL_URL=
+      - CALENDAR_URL=
+      - TELEGRAM_URL=
+      - PAYMENT_URL=
+      # Clean feature-off signal for the unused integrations (see docs/disableFeatures.md).
+      # NOTE: do NOT add `integration` here — it would also disable sign/print/export,
+      # which this stack runs.
+      - DISABLED_FEATURES=auto-translate,mailboxes,calendar,telegram
 
   # ---- Shared token-signing secret: SAME value on all seven services ----
   account:
