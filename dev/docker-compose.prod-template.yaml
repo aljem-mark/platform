@@ -51,6 +51,10 @@ services:
       - CALENDAR_URL=
       - TELEGRAM_URL=
       - PAYMENT_URL=
+      # Clean feature-off signal for the unused integrations (see docs/disableFeatures.md).
+      # NOTE: do NOT add `integration` here — it would also disable sign/print/export,
+      # which this stack runs.
+      - DISABLED_FEATURES=auto-translate,mailboxes,calendar,telegram
 
   # ---- Shared token-signing secret: SAME value on all seven services ----
   account:
