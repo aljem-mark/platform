@@ -1,0 +1,89 @@
+# Production configuration template for a public domain (e.g. wedid.work).
+#
+# HOW TO USE ON THE SERVER
+#   1. git pull (this branch), then copy this file:
+#        cp dev/docker-compose.prod-template.yaml dev/docker-compose.override.yaml
+#      `docker-compose.override.yaml` is auto-loaded by Compose, is gitignored
+#      in this directory pattern, and must never be committed with real values.
+#   2. Replace every REPLACE_ME_* with a real value:
+#        openssl rand -hex 32
+#   3. SERVER_SECRET: generate ONE value and use the SAME string on all seven
+#      token-verifying services below (account, stats, workspace_cockroach,
+#      front, transactor_cockroach, fulltext_cockroach, rating_cockroach).
+#      A mismatch invalidates token verification and logs everyone out / 401s.
+#   4. Bring the stack up (Compose merges per-key; no !override tags here):
+#        docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate
+#   5. Verify:
+#        curl -s https://<domain>/config.json | grep -c huly.local   # -> 0
+#        curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/branding.json   # -> 200
+#
+# NOTES
+#   * Browser-facing URLs below must match your reverse-proxy routing
+#     (see dev/nginx-wedid.work.conf template).
+#   * DOC_MODE gates /api/docs + /api/openapi.yaml: off (unset) -> 404,
+#     safe -> consumer spec, all -> full spec. Omit for public fail-closed.
+#   * Changing SERVER_SECRET invalidates existing sessions and previously
+#     minted API tokens: users re-login once; recreate API tokens afterwards.
+#   * MinIO AWS_* credentials are intentionally NOT overridden here — they must
+#     match the MinIO container's own credentials. Rotate as a separate change.
+
+services:
+  # ---- Browser-facing config for the front service (delivered via /config.json) ----
+  front:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+      - DOC_MODE=safe
+      - ACCOUNTS_URL=https://REPLACE_ME_DOMAIN/accounts
+      - COLLABORATOR_URL=wss://REPLACE_ME_DOMAIN/collaborator
+      - FILES_URL=https://REPLACE_ME_DOMAIN/files/:workspace/:blobId/:filename
+      - UPLOAD_URL=/files
+      - BRANDING_URL=https://REPLACE_ME_DOMAIN/branding.json
+      - REKONI_URL=https://REPLACE_ME_DOMAIN/rekoni
+      - DATALAKE_URL=https://REPLACE_ME_DOMAIN/datalake
+      - STREAM_URL=https://REPLACE_ME_DOMAIN/stream/recording
+
+  # ---- Shared token-signing secret: SAME value on all seven services ----
+  account:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+  stats:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+  workspace_cockroach:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+  transactor_cockroach:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+  fulltext_cockroach:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+  rating_cockroach:
+    environment:
+      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
+
+  # ---- Service-local secrets: independent values ----
+  collaborator:
+    environment:
+      - SECRET=REPLACE_ME_COLLABORATOR_SECRET
+  stream:
+    environment:
+      - STREAM_SERVER_SECRET=REPLACE_ME_STREAM_SERVER_SECRET
+  media:
+    environment:
+      - SECRET=REPLACE_ME_MEDIA_SECRET
+  analytics:
+    environment:
+      - SECRET=REPLACE_ME_ANALYTICS_SECRET
+  export:
+    environment:
+      - SECRET=REPLACE_ME_EXPORT_SECRET
+  datalake:
+    environment:
+      - SECRET=REPLACE_ME_DATALAKE_SECRET
+  hulylake:
+    environment:
+      - HULY_TOKEN_SECRET=REPLACE_ME_HULY_TOKEN_SECRET
+  events-processor:
+    environment:
+      - SECRET=REPLACE_ME_EVENTS_PROCESSOR_SECRET
