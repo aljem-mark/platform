@@ -202,7 +202,58 @@ surface visible; when enabled the routes are still unauthenticated.
 
 ---
 
-## 6. References
+## 6. Production deployment (public domain)
+
+Templates for deploying to a public domain (e.g. `wedid.work`):
+
+- `dev/docker-compose.prod-template.yaml` — Compose override (placeholders only)
+- `dev/nginx-wedid.work.conf` — TLS reverse-proxy template
+
+### Steps
+
+1. **On the server:** `git pull`, then generate the override with the helper script:
+   ```bash
+   bash scripts/generate-prod-config.sh --domain wedid.work
+   ```
+   It copies the template to `dev/docker-compose.override.yaml`, substitutes the
+   domain, generates one shared `SERVER_SECRET` (all 7 token-verifying services)
+   plus unique per-service secrets, refuses to finish if any `REPLACE_ME_*`
+   remains, and adds the output to `.git/info/exclude`.
+   `--dry-run` lists placeholders only; `--help` shows usage.
+   - `SERVER_SECRET` must be **one identical value** across all seven
+     token-verifying services (`account`, `stats`, `workspace_cockroach`,
+     `front`, `transactor_cockroach`, `fulltext_cockroach`,
+     `rating_cockroach`) — a mismatch invalidates token verification.
+   - Other `SECRET`/`STREAM_SERVER_SECRET`/`HULY_TOKEN_SECRET` values are
+     service-local; use distinct values.
+   - MinIO `AWS_*` credentials are intentionally not overridden — they must
+     match the MinIO container's own credentials (rotate separately).
+   - `docker-compose.override.yaml` holds real secrets: keep it untracked
+     (`echo 'dev/docker-compose.override.yaml' >> .git/info/exclude`).
+2. **Pre-flight merge check** (confirm nothing was stripped):
+   ```bash
+   docker compose -f docker-compose.yaml -f docker-compose.min.yaml config \
+     | grep -E 'ACCOUNTS_URL|BRANDING_URL|STORAGE_CONFIG'
+   ```
+3. **Deploy:**
+   ```bash
+   docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate
+   ```
+4. **Reverse proxy:** install `dev/nginx-wedid.work.conf` (replace
+   `REPLACE_ME_DOMAIN`), then `sudo certbot --nginx -d <domain>` and
+   `sudo nginx -t && sudo systemctl reload nginx`.
+5. **Verify:**
+   ```bash
+   curl -s https://<domain>/config.json | grep -c huly.local            # -> 0
+   curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/branding.json  # -> 200
+   ```
+   Then log in, upload a file end-to-end, and check `/api/docs` per `DOC_MODE`.
+
+> **Session note:** changing `SERVER_SECRET` invalidates all existing sessions
+> and previously minted API tokens. Users re-login once; recreate API tokens
+> (Settings → API Tokens) afterwards.
+
+## 7. References
 
 - `pods/server/src/rpc.ts` — workspace-data REST endpoints (Express).
 - `pods/server/src/server_http.ts` — server ops endpoints.
