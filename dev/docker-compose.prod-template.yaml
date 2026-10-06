@@ -42,6 +42,9 @@ services:
       - DATALAKE_URL=https://REPLACE_ME_DOMAIN/datalake
       - STREAM_URL=https://REPLACE_ME_DOMAIN/stream/recording
       # --- remaining browser-facing vars (must not leak internal huly.local URLs) ---
+      # NOTE: preview/link-preview/hulypulse are in the `full` profile
+      # (dev/docker-compose.min.yaml marks them `profiles: ["full"]`).
+      # If you deploy min-only, blank these four instead (see GMAIL_URL below).
       - PREVIEW_URL=https://REPLACE_ME_DOMAIN/preview
       - LINK_PREVIEW_URL=https://REPLACE_ME_DOMAIN/link-preview
       - PULSE_URL=wss://REPLACE_ME_DOMAIN/pulse/ws
