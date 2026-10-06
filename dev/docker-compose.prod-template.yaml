@@ -61,6 +61,15 @@ services:
       - CALENDAR_URL=
       - TELEGRAM_URL=
       - PAYMENT_URL=
+      # extraConfig vars merged into /config.json (pods/front/src/__start.ts:29-59).
+      # Blanked: their services are not exposed through the proxy. Set real
+      # https://REPLACE_ME_DOMAIN/<path> values only if you add matching nginx locations.
+      - GITHUB_URL=
+      - SIGN_URL=
+      - PRINT_URL=
+      - STATS_URL=
+      - BACKUP_URL=
+      - EXPORT_URL=
       # Clean feature-off signal for the unused integrations (see docs/disableFeatures.md).
       # NOTE: do NOT add `integration` here — it would also disable sign/print/export,
       # which this stack runs.
