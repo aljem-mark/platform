@@ -69,7 +69,12 @@ jspm_packages/
 # or `cp dev/.env.example dev/.env`.
 .env
 .env.*
+.env-*
 !.env.example
+# Server-side deployment secrets (root-only, OUTSIDE the repo normally). The
+# documented keys live in dev/secrets.env.example; a real secrets.env must never
+# be tracked anywhere in the tree.
+secrets.env
 # ...backups and scratch copies of those secrets must never be committed either
 *.secret-backup
 *.env.backup

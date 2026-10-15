@@ -26,6 +26,14 @@
 #     half-written dev/.env behind.
 #   * Compose loads dev/.env automatically when it runs from dev/ — that is what
 #     `rush docker:up:min` does. NEVER commit dev/.env: it holds real secrets.
+#   * SERVER: the secrets belong in a root-only file OUTSIDE the repo, e.g.
+#     /etc/wedidwork/secrets.env (chmod 600), injected with systemd
+#     EnvironmentFile= or `set -a; . /etc/wedidwork/secrets.env; set +a` before
+#     `up` — the shell environment wins over dev/.env (keys documented in
+#     dev/secrets.env.example). Generate dev/.env for LOCAL use, or for the
+#     server's non-secret values only.
+#   * HULY_SHARED_SECRET must stay STABLE across redeploys (it signs tokens for
+#     seven services); this script reuses an existing value unless --rotate-secret.
 #   * This is the single deployment mechanism. The per-service
 #     dev/docker-compose.prod-template.yaml + docker-compose.override.yaml flow is
 #     retired (kept for reference only, not used by this script).
@@ -78,8 +86,9 @@ if [[ "$DRY_RUN" == true ]]; then
   grep -oE 'REPLACE_ME_[A-Z_]+' "$TEMPLATE" | sort | uniq -c
   echo
   echo "Note: REPLACE_ME_PLUNK_SMTP_PASSWORD is prompted for (never generated) — it"
-  echo "      must be the mail provider's own secret. REPLACE_ME_HULY_SHARED_SECRET is"
-  echo "      generated once and afterwards preserved (see --rotate-secret); the"
+  echo "      must be the mail provider's own secret, and may be left EMPTY when you"
+  echo "      do not need outbound mail. REPLACE_ME_HULY_SHARED_SECRET is generated"
+  echo "      once and afterwards preserved (see --rotate-secret); the"
   echo "      REPLACE_ME_DOMAIN occurrences take the --domain value."
   exit 0
 fi
@@ -107,24 +116,18 @@ else
   SHARED_SECRET_NOTE="reusing the existing value (--rotate-secret to change it)"
 fi
 
-# The mail (pod-mail) SMTP password: user-supplied, NEVER generated. Only the
-# value issued by the mail provider works (Plunk secret key, `sk_…`). Prompt
-# hidden; PLUNK_SMTP_PASSWORD allows a non-interactive run.
+# The mail (pod-mail) SMTP password: user-supplied and NEVER generated. Only the
+# value issued by the mail provider works (Plunk secret key, `sk_…`). It is needed
+# only when you actually want outbound mail, so it may be left empty; the prompt is
+# skipped entirely for a non-interactive run.
 SMTP_PASSWORD_VALUE="${PLUNK_SMTP_PASSWORD:-}"
-if [[ -z "$SMTP_PASSWORD_VALUE" ]]; then
-  if [[ -t 0 ]]; then
-    read -r -s -p "Enter the SMTP password (mail provider secret, Plunk 'sk_…'): " SMTP_PASSWORD_VALUE || true
-    echo
-  else
-    echo "Error: no interactive terminal for the SMTP password prompt." >&2
-    echo "       Re-run from a terminal, or set PLUNK_SMTP_PASSWORD in the environment." >&2
-    exit 1
-  fi
+if [[ -z "$SMTP_PASSWORD_VALUE" && -t 0 ]]; then
+  read -r -s -p "SMTP password for the mail relay (Plunk 'sk_…', Enter to skip): " SMTP_PASSWORD_VALUE || true
+  echo
 fi
 if [[ -z "$SMTP_PASSWORD_VALUE" ]]; then
-  echo "Error: the SMTP password is required (mail provider secret, Plunk 'sk_…')." >&2
-  echo "       It cannot be generated — copy it from the provider dashboard." >&2
-  exit 1
+  echo "  PLUNK_SMTP_PASSWORD: not set — outbound mail stays disabled until you set it"
+  echo "  (server: /etc/wedidwork/secrets.env; locally: PLUNK_SMTP_PASSWORD=… )."
 fi
 if ! grep -q 'REPLACE_ME_PLUNK_SMTP_PASSWORD' "$TEMPLATE"; then
   echo "Error: REPLACE_ME_PLUNK_SMTP_PASSWORD is missing from the template (drift)." >&2
@@ -173,6 +176,12 @@ echo "Next steps:"
 echo "  1. Review $OUTPUT. The DB / MinIO / storage values are LOCAL defaults — for a"
 echo "     production deploy set your real DB_CR_URL / DB_URL_PG / MONGO_URL /"
 echo "     STORAGE_CONFIG / BACKUP_STORAGE_CONFIG / PLATFORM_ADMIN_EMAILS."
+echo "     ON A SERVER, do not keep secrets in this file: put HULY_SHARED_SECRET,"
+echo "     PLUNK_SMTP_PASSWORD and the DB credentials in a root-only file OUTSIDE the"
+echo "     repo (keys: dev/secrets.env.example) and inject it before 'up':"
+echo "       set -a; . /etc/wedidwork/secrets.env; set +a"
+echo "     (the shell environment wins over dev/.env, so nothing sensitive needs to"
+echo "      exist repo-side)."
 echo "  2. Build the images. 'rush docker:min' does NOT build pod-mail and the compose"
 echo "     has no 'build:' key, so build the mail image explicitly too:"
 echo "       rush docker:build --to @hcengineering/pod-mail     # -> hardcoreeng/mail:<git-rev>"
