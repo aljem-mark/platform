@@ -206,52 +206,59 @@ surface visible; when enabled the routes are still unauthenticated.
 
 Templates for deploying to a public domain (e.g. `wedid.work`):
 
-- `dev/docker-compose.prod-template.yaml` — Compose override (placeholders only)
+- `dev/.env.example` — environment template for the Compose stack (placeholders only)
 - `dev/nginx-wedid.work.conf` — TLS reverse-proxy template
+
+`dev/docker-compose.yaml` interpolates its deployment values from `dev/.env`, which
+Compose loads automatically when it runs from `dev/` (that is what `rush docker:up:min`
+does). `dev/.env` is **gitignored** and must never be committed; the committed artifact
+is `dev/.env.example`. The older `dev/docker-compose.prod-template.yaml` +
+`docker-compose.override.yaml` flow is **retired** — the template file is kept for
+reference only.
 
 ### Steps
 
-1. **On the server:** `git pull`, then generate the override with the helper script:
+1. **On the server:** `git pull`, then generate `dev/.env` from the template:
    ```bash
    bash scripts/generate-prod-config.sh --domain wedid.work
    ```
-   It copies the template to `dev/docker-compose.override.yaml`, substitutes the
-   domain, generates one shared `SERVER_SECRET` (all 7 token-verifying services)
-   plus unique per-service secrets, refuses to finish if any `REPLACE_ME_*`
-   remains, and adds the output to `.git/info/exclude`.
+   It copies `dev/.env.example` to `dev/.env`, substitutes the domain, generates
+   `HULY_SHARED_SECRET` (`openssl rand -hex 32`, **reused** from an existing `dev/.env`
+   unless `--rotate-secret` is passed), prompts with hidden input for the mail
+   provider's `PLUNK_SMTP_PASSWORD` (user-supplied, never generated), refuses to
+   finish if any `REPLACE_ME_*` remains, and leaves a backup at `dev/.env.bak`.
    `--dry-run` lists placeholders only; `--help` shows usage.
-   - `SERVER_SECRET` must be **one identical value** across all seven
+   - `HULY_SHARED_SECRET` is the single `SERVER_SECRET` value shared by all seven
      token-verifying services (`account`, `stats`, `workspace_cockroach`,
      `front`, `transactor_cockroach`, `fulltext_cockroach`,
-     `rating_cockroach`) — a mismatch invalidates token verification.
-   - Other `SECRET`/`STREAM_SERVER_SECRET`/`HULY_TOKEN_SECRET` values are
-     service-local; use distinct values.
-   - MinIO `AWS_*` credentials are intentionally not overridden — they must
-     match the MinIO container's own credentials (rotate separately).
-   - `docker-compose.override.yaml` holds real secrets: keep it untracked
-     (`echo 'dev/docker-compose.override.yaml' >> .git/info/exclude`).
-2. **Pre-flight merge check** (confirm nothing was stripped):
+     `rating_cockroach`) — a mismatch invalidates token verification, and changing
+     it logs every user out.
+   - The DB / MinIO / storage values in the template are **local defaults**: set your
+     real credentials (`DB_CR_URL`, `DB_URL_PG`, `MONGO_URL`, `STORAGE_CONFIG`,
+     `BACKUP_STORAGE_CONFIG`) before a production deploy.
+2. **Pre-flight** (confirm interpolation resolved — no empty or `huly.local` values where
+   a public one belongs):
    ```bash
-   docker compose -f docker-compose.yaml -f docker-compose.min.yaml config \
-     | grep -E 'ACCOUNTS_URL|BRANDING_URL|STORAGE_CONFIG'
+   cd dev && docker compose -f docker-compose.yaml -f docker-compose.min.yaml config \
+     | grep -E 'ACCOUNTS_URL|STORAGE_CONFIG|HULY_SHARED_SECRET'
    ```
 3. **Deploy:**
    ```bash
-   docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate
+   cd dev && docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate
    ```
 4. **Reverse proxy:** install `dev/nginx-wedid.work.conf` (replace
    `REPLACE_ME_DOMAIN`), then `sudo certbot --nginx -d <domain>` and
    `sudo nginx -t && sudo systemctl reload nginx`.
 5. **Verify:**
    ```bash
-   curl -s https://<domain>/config.json | grep -c huly.local            # -> 0
+   curl -s https://<domain>/config.json | tr ',' '\n' | grep huly.local   # -> empty
    curl -s -o /dev/null -w '%{http_code}\n' https://<domain>/branding.json  # -> 200
    ```
    Then log in, upload a file end-to-end, and check `/api/docs` per `DOC_MODE`.
 
-> **Session note:** changing `SERVER_SECRET` invalidates all existing sessions
-> and previously minted API tokens. Users re-login once; recreate API tokens
-> (Settings → API Tokens) afterwards.
+> **Session note:** changing `HULY_SHARED_SECRET` (the shared `SERVER_SECRET`)
+> invalidates all existing sessions and previously minted API tokens. Users re-login
+> once; recreate API tokens (Settings → API Tokens) afterwards.
 
 ## 7. References
 
