@@ -1,0 +1,754 @@
+services:
+  stream:
+    image: 'hardcoreeng/stream'
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    container_name: stream
+    environment:
+      - STREAM_ENDPOINT_URL=${STREAM_DATALAKE_URL}
+      - STREAM_INSECURE=true
+      - STREAM_SERVER_SECRET=${HULY_SHARED_SECRET}
+      - STREAM_MAX_PARALLEL_SCALING_COUNT=6
+      - STREAM_LOG_LEVEL=debug
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - STREAM_REGION=cockroach
+      - STREAM_QUEUE_CONFIG=${QUEUE_CONFIG}
+    ports:
+      - 1080:1080
+    restart: unless-stopped
+  media:
+    image: 'hardcoreeng/media'
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    container_name: media
+    environment:
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - SECRET=secret
+      - REGION=cockroach
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+    restart: unless-stopped
+  preview:
+    image: 'hardcoreeng/preview'
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    container_name: preview
+    environment:
+      - SECRET=secret
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - CACHE_PATH=/data/cache
+    ports:
+      - 4040:4040
+    restart: unless-stopped
+  link-preview:
+    image: 'hardcoreeng/link-preview'
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    container_name: link-preview
+    environment:
+      - SECRET=secret
+      - PORT=4041
+    ports:
+      - 4041:4041
+    restart: unless-stopped
+  cockroach:
+    image: cockroachdb/cockroach:latest-v24.3
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    ports:
+      - '26257:26257'
+      - '8089:8080'
+    command: start-single-node --insecure
+    volumes:
+      - cockroach_db:/cockroach/cockroach-data
+    restart: unless-stopped
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --memory 512M
+    container_name: redpanda
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    ports:
+      - 18081:18081
+      - 18082:18082
+      - 19092:19092
+      - 19644:9644
+    healthcheck:
+      test: ['CMD', 'rpk', 'cluster', 'info', '-X', 'user=superuser', '-X', 'pass=secretpassword']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  redpanda_console:
+    image: docker.redpanda.com/redpandadata/console:v2.8.3
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - 8000:8080
+    depends_on:
+      - redpanda
+    restart: unless-stopped
+  minio:
+    image: 'minio/minio'
+    command: server /data --address ":9000" --console-address ":9001"
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    expose:
+      - 9000
+      - 9001
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - files:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+  elastic:
+    image: 'elasticsearch:7.14.2'
+    expose:
+      - 9200
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    volumes:
+      - elastic:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    environment:
+      - ELASTICSEARCH_PORT_NUMBER=9200
+      - BITNAMI_DEBUG=true
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx450m
+    healthcheck:
+      interval: 20s
+      retries: 10
+      test: curl -s http://localhost:9200/_cluster/health | grep -vq '"status":"red"'
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1024m
+  redis:
+    image: redis:8.0.2-alpine3.21
+    ports:
+      - 6379:6379
+    restart: unless-stopped
+
+  account:
+    image: hardcoreeng/account
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - stats
+    ports:
+      - 3000:3000
+    volumes:
+      - ./branding.json:/var/cfg/branding.json
+    environment:
+      - ACCOUNT_PORT=3000
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - ADMIN_EMAILS=admin,${PLATFORM_ADMIN_EMAILS}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - WORKSPACE_LIMIT_PER_USER=10000
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      # - DB_NS=account-2
+      # Pass only one region to disallow selection for new workspaces.
+      - REGION_INFO=cockroach|CockroachDB
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - MAIL_URL=
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - FRONT_URL=http://front:8080
+      - LAST_NAME_FIRST=true
+      # - WS_LIVENESS_DAYS=1
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - BRANDING_PATH=/var/cfg/branding.json
+      # - DISABLE_SIGNUP=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - MAILBOX_DOMAINS=huly.dev.local
+      - MAILBOX_MAX_COUNT_PER_ACCOUNT=2
+    restart: unless-stopped
+  stats:
+    image: hardcoreeng/stats
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    ports:
+      - 4900:4900
+    environment:
+      - PORT=4900
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+  workspace_cockroach:
+    image: hardcoreeng/workspace
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - cockroach
+      - minio
+      - stats
+    depends_on:
+      redpanda:
+        condition: service_started
+    volumes:
+      - ./branding.json:/var/cfg/branding.json
+    environment:
+      - WS_OPERATION=all+backup
+      - REGION=cockroach
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - ACCOUNTS_DB_URL=${DB_CR_URL}
+      - BRANDING_PATH=/var/cfg/branding.json
+      - BACKUP_STORAGE=${BACKUP_STORAGE_CONFIG}
+      - BACKUP_BUCKET=${BACKUP_BUCKET_NAME}
+      - MAIL_URL=
+      # - INIT_WORKSPACE=staging-dev
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+  collaborator:
+    image: hardcoreeng/collaborator
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - minio
+      - transactor_cockroach
+      - stats
+    ports:
+      - 3078:3078
+    environment:
+      - COLLABORATOR_PORT=3078
+      - SECRET=secret
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+  front:
+    image: hardcoreeng/front
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - stats
+    ports:
+      - 8087:8080
+      - 8088:8080
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - DOC_MODE=safe
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - FILES_URL=${DATALAKE_INTERNAL_URL}/blob/:workspace/:blobId/:filename
+      - UPLOAD_URL=/files
+      - PREVIEW_URL=http://huly.local:4040
+      - GMAIL_URL=http://huly.local:8093
+      - CALENDAR_URL=http://huly.local:8095
+      - TELEGRAM_URL=http://huly.local:8086
+      - REKONI_URL=${REKONI_INTERNAL_URL}
+      - COLLABORATOR_URL=ws://huly.local:3078
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - GITHUB_URL=http://huly.local:3500
+      - PRINT_URL=http://huly.local:4005
+      - SIGN_URL=http://huly.local:4006
+      #      - ANALYTICS_COLLECTOR_URL=http://huly.local:4017
+      - DESKTOP_UPDATES_URL=https://dist.huly.io
+      - DESKTOP_UPDATES_CHANNEL=dev
+      - DESKTOP_UPDATES_CHANNELS=dev;tracex:dev-tracex
+      - BRANDING_URL=http://huly.local:8087/branding.json
+      - STREAM_URL=http://huly.local:1080/recording
+      - PAYMENT_URL=http://huly.local:3040
+      - COMMUNICATION_API_ENABLED=true
+      - BACKUP_URL=http://huly.local:4039/api/backup,
+      - EXCLUDED_APPLICATIONS_FOR_ANONYMOUS=[]
+      - DISABLED_FEATURES=auto-translate,mailboxes
+      # - DISABLE_SIGNUP=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - PULSE_URL=ws://huly.local:8099/ws
+      - DATALAKE_URL=http://huly.local:4030
+      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
+      - EXPORT_URL=http://huly.local:4009
+      - LINK_PREVIEW_URL=http://huly.local:4041
+    restart: unless-stopped
+  transactor_cockroach:
+    image: hardcoreeng/transactor
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - cockroach
+      - minio
+      - account
+      - stats
+    depends_on:
+      redpanda:
+        condition: service_started
+    ports:
+      - 3332:3332
+    volumes:
+      - ./branding.json:/var/cfg/branding.json
+    environment:
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - SERVER_PORT=3332
+      - REGION=cockroach
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - ENABLE_COMPRESSION=true
+      - FULLTEXT_URL=${FULLTEXT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - METRICS_CONSOLE=false
+      - METRICS_FILE=metrics.txt
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - FRONT_URL=http://front:8080
+      - MAIL_URL=''
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - LAST_NAME_FIRST=true
+      - BRANDING_PATH=/var/cfg/branding.json
+      - AI_BOT_URL=http://huly.local:4010
+      - COMMUNICATION_TIME_LOGGING_ENABLED=true
+      - RATE_LIMIT_MAX=250 # 250 requests per 30 seconds
+      - RATE_LIMIT_WINDOW=30000
+      - FILES_URL=${DATALAKE_INTERNAL_URL}/blob/:workspace/:blobId/:filename
+      - COMMUNICATION_API_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
+    restart: unless-stopped
+  rekoni:
+    image: hardcoreeng/rekoni-service
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    restart: unless-stopped
+    ports:
+      - 4004:4004
+    environment:
+      - STATS_URL=http://huly.local:4901
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+  fulltext_cockroach:
+    image: hardcoreeng/fulltext
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      elastic:
+        condition: service_healthy
+    restart: unless-stopped
+    links:
+      - elastic
+      - cockroach
+      - rekoni
+    ports:
+      - 4702:4702
+    environment:
+      - PORT=4702
+      - REGION=cockroach
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - FULLTEXT_DB_URL=http://huly.local:9200
+      - ELASTIC_INDEX_NAME=local_storage_index # Same index for simplicity
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - REKONI_URL=${REKONI_INTERNAL_URL}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
+      - COMMUNICATION_API_ENABLED=true
+  print:
+    image: hardcoreeng/print
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    restart: unless-stopped
+    ports:
+      - 4005:4005
+    environment:
+      - SECRET=secret
+      - REGION=cockroach
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - FRONT_URL=http://front:8080
+  sign:
+    image: hardcoreeng/sign
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    restart: unless-stopped
+    ports:
+      - 4006:4006
+    volumes:
+      - ../services/sign/pod-sign/debug/certificate.p12:/var/cfg/certificate.p12
+      - ../services/sign/pod-sign/debug/branding.json:/var/cfg/branding.json
+    environment:
+      - SECRET=secret
+      - MINIO_ENDPOINT=minio
+      - REGION=cockroach
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - CERTIFICATE_PATH=/var/cfg/certificate.p12
+      - SERVICE_ID=sign-service
+      - BRANDING_PATH=/var/cfg/branding.json
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+  # aiBot:
+  #   image: hardcoreeng/ai-bot
+  #   ports:
+  #     - 4010:4010
+  #   extra_hosts:
+  #     - 'huly.local:host-gateway'
+  #   restart: unless-stopped
+  #   environment:
+  #     - SERVER_SECRET=${HULY_SHARED_SECRET}
+  #     - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+  #     - QUEUE_CONFIG=${QUEUE_CONFIG}
+  #     - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+  #     - STORAGE_CONFIG=${STORAGE_CONFIG}
+  #     - FIRST_NAME=Jolie
+  #     - LAST_NAME=AI
+  #     - PASSWORD=password
+  #     - AVATAR_PATH=./avatar.png
+  #     - AVATAR_CONTENT_TYPE=.png
+  #     - STATS_URL=${STATS_INTERNAL_URL}
+  # #      - LOVE_ENDPOINT=http://huly.local:8096
+  # #      - OPENAI_API_KEY=token
+  analytics:
+    image: hardcoreeng/analytics-collector
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    restart: unless-stopped
+    ports:
+      - 4017:4017
+    environment:
+      - SECRET=secret
+      - PORT=4017
+      - SERVICE_ID=analytics-collector-service
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      # - POSTHOG_HOST=${POSTHOG_HOST}
+      # - POSTHOG_API_KEY=${POSTHOG_API_KEY}
+      # - MAX_PAYLOAD_SIZE=10mb
+  export:
+    image: hardcoreeng/export
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - minio
+      - stats
+    ports:
+      - 4009:4009
+    environment:
+      - PORT=4009
+      - SECRET=secret
+      - SERVICE_ID=export-service
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+  datalake:
+    image: hardcoreeng/datalake
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      minio:
+        condition: service_healthy
+      cockroach:
+        condition: service_started
+      stats:
+        condition: service_started
+      account:
+        condition: service_started
+    ports:
+      - 4030:4030
+    environment:
+      - PORT=4030
+      - SECRET=secret
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - BUCKETS=blobs,eu|http://minio:9000?accessKey=minioadmin&secretKey=minioadmin
+      - REGION=cockroach
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+  hulylake:
+    image: hardcoreeng/hulylake
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      minio:
+        condition: service_healthy
+      cockroach:
+        condition: service_started
+    ports:
+      - 8096:8096
+    environment:
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
+      - HULY_DB_CONNECTION=${DB_CR_URL}
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=local
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+    restart: unless-stopped
+  hulykvs:
+    image: hardcoreeng/hulykvs
+    depends_on:
+      cockroach:
+        condition: service_started
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    ports:
+      - 8094:8094
+    environment:
+      - HULY_DB_CONNECTION=${DB_CR_URL}
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
+    restart: unless-stopped
+  hulygun:
+    image: hardcoreeng/hulygun
+    depends_on:
+      redpanda:
+        condition: service_started
+      account:
+        condition: service_started
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    environment:
+      - HULY_LOG=debug
+      - HULY_KAFKA_BOOTSTRAP=redpanda:9092
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
+      - HULY_ACCOUNT_SERVICE=${ACCOUNT_INTERNAL_URL}
+    restart: unless-stopped
+  hulypulse:
+    image: hardcoreeng/hulypulse
+    depends_on:
+      redis:
+        condition: service_started
+    ports:
+      - 8099:8099
+    environment:
+      - HULY_REDIS_URLS=redis://redis:6379
+      - HULY_BIND_PORT=8099
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
+    restart: unless-stopped
+
+  process-service:
+    image: hardcoreeng/process
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      redpanda:
+        condition: service_started
+      account:
+        condition: service_started
+    environment:
+      - SECRET=secret
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - QUEUE_REGION=cockroach
+    restart: unless-stopped
+  time-machine:
+    image: hardcoreeng/worker
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      redpanda:
+        condition: service_started
+      account:
+        condition: service_started
+      cockroach:
+        condition: service_started
+    environment:
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - QUEUE_REGION=cockroach
+    restart: unless-stopped
+  events-processor:
+    image: hardcoreeng/events-processor
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      redpanda:
+        condition: service_started
+      account:
+        condition: service_started
+    environment:
+      - SERVICE_ID=events-processor
+      - LOG_LEVEL=debug
+      - SECRET=secret
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - QUEUE_REGION=cockroach
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+  #  translate:
+  #    image: hardcoreeng/translate
+  #    extra_hosts:
+  #      - 'huly.local:host-gateway'
+  #    depends_on:
+  #      redpanda:
+  #        condition: service_started
+  #      account:
+  #        condition: service_started
+  #    environment:
+  #      - SECRET=secret
+  #      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+  #      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
+  #      - QUEUE_CONFIG=${QUEUE_CONFIG}
+  #      - QUEUE_REGION=cockroach
+  #      - OPENAI_API_KEY=
+  #    restart: unless-stopped
+  backup-cockroach:
+    image: hardcoreeng/backup
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      minio:
+        condition: service_healthy
+      cockroach:
+        condition: service_started
+      stats:
+        condition: service_started
+      account:
+        condition: service_started
+    environment:
+      - SECRET=secret
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - ACCOUNTS_DB_URL=${DB_CR_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - REGION=cockroach
+      - BUCKET_NAME=backups
+      - INTERVAL=60
+      - STORAGE=minio|minio?accessKey=minioadmin&secretKey=minioadmin
+      - WORKSPACE_STORAGE=${STORAGE_CONFIG}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - TEMPORAL_ADDRESS=localhost:7233
+    restart: unless-stopped
+  backup-api:
+    image: hardcoreeng/backup-api
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    depends_on:
+      minio:
+        condition: service_healthy
+      stats:
+        condition: service_started
+      account:
+        condition: service_started
+    ports:
+      - 4039:4039
+    environment:
+      - PORT=4039
+      - SECRET=secret
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - BUCKET_NAME=backups
+      - STORAGE=minio|minio?accessKey=minioadmin&secretKey=minioadmin
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    restart: unless-stopped
+
+  rating_cockroach:
+    image: hardcoreeng/rating
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    links:
+      - cockroach
+      - minio
+      - account
+      - stats
+    depends_on:
+      redpanda:
+        condition: service_started
+    environment:
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - REGION=cockroach
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - COMMUNICATION_TIME_LOGGING_ENABLED=true
+      - COMMUNICATION_API_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - HYLYLAKE_URL=${HULYLAKE_INTERNAL_URL}
+    restart: unless-stopped
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    ports:
+      - 16686:16686 # Web UI
+      - 4317:4317
+      - 4318:4318
+    volumes:
+      - telemetry:/badger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=badger
+      - BADGER_DIRECTORY_VALUE=/badger/data
+      - BADGER_DIRECTORY_KEY=/badger/key
+    restart: unless-stopped
+volumes:
+  db:
+  dbpg:
+  files:
+  elastic:
+  cockroach_db:
+  redpanda:
+  telemetry:
