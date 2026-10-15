@@ -165,6 +165,37 @@ services:
       - 6379:6379
     restart: unless-stopped
 
+  # Transactional mail relay (pod-mail, image hardcoreeng/mail) — an SMTP *CLIENT*:
+  # it always needs an external relay (currently Plunk, smtp.useplunk.com). SOURCE must
+  # be a sender domain verified with the provider, with SPF + DKIM (ideally DMARC) in
+  # DNS, or mail is rejected / lands in spam.
+  #
+  # SECURITY: NO published ports and NO nginx location — compose-network reachability
+  # only. Its POST /send is UNAUTHENTICATED there: pod-mail compares an `apiKey` field in
+  # the request BODY (src/main.ts), while every in-scope caller sends an
+  # `Authorization: Bearer …` header instead, so API_KEY / MAIL_AUTH_TOKEN neither match
+  # nor protect anything (setting API_KEY would 401 every send). Network isolation is the
+  # only auth control here; this is a deliberate, documented decision.
+  #
+  # SMTP_USERNAME / SMTP_PORT / SMTP_HOST are constants (non-secret). SMTP_PASSWORD is
+  # user-supplied and never generated — it comes from the deployment environment, i.e.
+  # the server's root-only /etc/wedidwork/secrets.env (see dev/secrets.env.example) or
+  # the local dev/.env. Empty = the relay cannot authenticate, so no mail is delivered.
+  #
+  # pod-mail is NOT in `rush docker:min`'s --to list and there is no `build:` key, so a
+  # bare `up` would pull a stale/absent hardcoreeng/mail:latest — build it explicitly:
+  #   rush docker:build --to @hcengineering/pod-mail     # -> hardcoreeng/mail[:<git-rev>]
+  mail:
+    image: hardcoreeng/mail
+    environment:
+      - PORT=8097
+      - SOURCE=no-reply@wedid.work
+      - SMTP_HOST=smtp.useplunk.com
+      - SMTP_PORT=465
+      - SMTP_USERNAME=plunk
+      - SMTP_PASSWORD=${PLUNK_SMTP_PASSWORD}
+      - SMTP_TLS_MODE=secure
+    restart: unless-stopped
   account:
     image: hardcoreeng/account
     extra_hosts:
@@ -187,7 +218,9 @@ services:
       # Pass only one region to disallow selection for new workspaces.
       - REGION_INFO=cockroach|CockroachDB
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - MAIL_URL=
+      # Compose-network address (no published port on `mail`): enables signup
+      # confirmation / OTP / invite / password-reset email AND flips forceConfirmation on.
+      - MAIL_URL=http://mail:8097
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - FRONT_URL=http://front:8080
       - LAST_NAME_FIRST=true
@@ -237,7 +270,8 @@ services:
       - BRANDING_PATH=/var/cfg/branding.json
       - BACKUP_STORAGE=${BACKUP_STORAGE_CONFIG}
       - BACKUP_BUCKET=${BACKUP_BUCKET_NAME}
-      - MAIL_URL=
+      # pod-mail address for server-side notification email (pods/server __start.ts).
+      - MAIL_URL=http://mail:8097
       # - INIT_WORKSPACE=staging-dev
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
     restart: unless-stopped
