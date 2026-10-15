@@ -80,6 +80,7 @@ secrets.env
 *.env.backup
 *.env.bak
 *.env.pre-final-cleanup-*
+*.pre-final-cleanup-*
 dev/**/*.bak
 # retired per-service override flow (its values are generated into dev/.env now)
 dev/docker-compose.override.yaml
