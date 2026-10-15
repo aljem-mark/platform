@@ -44,5 +44,12 @@
     "title": "Example",
     "language": "en",
     "initWorkspace": "init"
+  },
+  "wedid.work": {
+    "key": "huly",
+    "title": "Huly",
+    "protocol": "https",
+    "language": "en",
+    "lastNameFirst": "true"
   }
 }

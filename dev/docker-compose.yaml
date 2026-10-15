@@ -5,9 +5,9 @@ services:
       - 'huly.local:host-gateway'
     container_name: stream
     environment:
-      - STREAM_ENDPOINT_URL=datalake://huly.local:4030
+      - STREAM_ENDPOINT_URL=${STREAM_DATALAKE_URL}
       - STREAM_INSECURE=true
-      - STREAM_SERVER_SECRET=secret
+      - STREAM_SERVER_SECRET=${HULY_SHARED_SECRET}
       - STREAM_MAX_PARALLEL_SCALING_COUNT=6
       - STREAM_LOG_LEVEL=debug
       - AWS_ACCESS_KEY_ID=minioadmin
@@ -23,7 +23,7 @@ services:
       - 'huly.local:host-gateway'
     container_name: media
     environment:
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - SECRET=secret
       - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
@@ -178,21 +178,23 @@ services:
     environment:
       - ACCOUNT_PORT=3000
       - QUEUE_CONFIG=${QUEUE_CONFIG}
-      - SERVER_SECRET=secret
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
       - ADMIN_EMAILS=admin,${PLATFORM_ADMIN_EMAILS}
-      - STATS_URL=http://huly.local:4900
+      - STATS_URL=${STATS_INTERNAL_URL}
       - WORKSPACE_LIMIT_PER_USER=10000
       - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       # - DB_NS=account-2
       # Pass only one region to disallow selection for new workspaces.
       - REGION_INFO=cockroach|CockroachDB
-      - TRANSACTOR_URL=ws://huly.local:3332;;cockroach,
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - MAIL_URL=
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - FRONT_URL=http://huly.local:8087
+      - FRONT_URL=http://front:8080
       - LAST_NAME_FIRST=true
       # - WS_LIVENESS_DAYS=1
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - BRANDING_PATH=/var/cfg/branding.json
       # - DISABLE_SIGNUP=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
@@ -207,7 +209,7 @@ services:
       - 4900:4900
     environment:
       - PORT=4900
-      - SERVER_SECRET=secret
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
     restart: unless-stopped
   workspace_cockroach:
@@ -226,12 +228,14 @@ services:
     environment:
       - WS_OPERATION=all+backup
       - REGION=cockroach
-      - SERVER_SECRET=secret
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - DB_URL=${DB_CR_URL}
-      - STATS_URL=http://huly.local:4900
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - ACCOUNTS_DB_URL=${DB_CR_URL}
       - BRANDING_PATH=/var/cfg/branding.json
       - BACKUP_STORAGE=${BACKUP_STORAGE_CONFIG}
@@ -253,9 +257,9 @@ services:
     environment:
       - COLLABORATOR_PORT=3078
       - SECRET=secret
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - STATS_URL=http://huly.local:4900
+      - STATS_URL=${STATS_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
     restart: unless-stopped
   front:
@@ -269,17 +273,17 @@ services:
       - 8088:8080
     environment:
       - SERVER_PORT=8080
-      - SERVER_SECRET=secret
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
       - DOC_MODE=safe
-      - ACCOUNTS_URL=http://huly.local:3000
-      - STATS_URL=http://huly.local:4900
-      - FILES_URL=http://huly.local:4030/blob/:workspace/:blobId/:filename
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - FILES_URL=${DATALAKE_INTERNAL_URL}/blob/:workspace/:blobId/:filename
       - UPLOAD_URL=/files
       - PREVIEW_URL=http://huly.local:4040
       - GMAIL_URL=http://huly.local:8093
       - CALENDAR_URL=http://huly.local:8095
       - TELEGRAM_URL=http://huly.local:8086
-      - REKONI_URL=http://huly.local:4004
+      - REKONI_URL=${REKONI_INTERNAL_URL}
       - COLLABORATOR_URL=ws://huly.local:3078
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - GITHUB_URL=http://huly.local:3500
@@ -300,7 +304,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
       - PULSE_URL=ws://huly.local:8099/ws
       - DATALAKE_URL=http://huly.local:4030
-      - HULYLAKE_URL=http://huly.local:8096
+      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
       - EXPORT_URL=http://huly.local:4009
       - LINK_PREVIEW_URL=http://huly.local:4041
     restart: unless-stopped
@@ -324,27 +328,28 @@ services:
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - SERVER_PORT=3332
       - REGION=cockroach
-      - SERVER_SECRET=secret
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
       - ENABLE_COMPRESSION=true
-      - FULLTEXT_URL=http://huly.local:4702
-      - STATS_URL=http://huly.local:4900
+      - FULLTEXT_URL=${FULLTEXT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - METRICS_CONSOLE=false
       - METRICS_FILE=metrics.txt
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - FRONT_URL=http://huly.local:8087
+      - FRONT_URL=http://front:8080
       - MAIL_URL=''
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - LAST_NAME_FIRST=true
       - BRANDING_PATH=/var/cfg/branding.json
-      - AI_BOT_URL=http://huly.local:4010
       - COMMUNICATION_TIME_LOGGING_ENABLED=true
       - RATE_LIMIT_MAX=250 # 250 requests per 30 seconds
       - RATE_LIMIT_WINDOW=30000
-      - FILES_URL=http://huly.local:4030/blob/:workspace/:blobId/:filename
+      - FILES_URL=${DATALAKE_INTERNAL_URL}/blob/:workspace/:blobId/:filename
       - COMMUNICATION_API_ENABLED=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
-      - HYLYLAKE_URL=http://huly.local:8096
+      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
     restart: unless-stopped
   rekoni:
     image: hardcoreeng/rekoni-service
@@ -354,7 +359,7 @@ services:
     ports:
       - 4004:4004
     environment:
-      - STATS_URL=http://huly.local:4901
+      - STATS_URL=${STATS_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
   fulltext_cockroach:
     image: hardcoreeng/fulltext
@@ -373,17 +378,19 @@ services:
     environment:
       - PORT=4702
       - REGION=cockroach
-      - SERVER_SECRET=secret
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - DB_URL=${DB_CR_URL}
-      - FULLTEXT_DB_URL=http://huly.local:9200
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - FULLTEXT_DB_URL=${ELASTIC_INTERNAL_URL}
       - ELASTIC_INDEX_NAME=local_storage_index # Same index for simplicity
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - STATS_URL=http://huly.local:4900
-      - REKONI_URL=http://huly.local:4004
-      - ACCOUNTS_URL=http://huly.local:3000
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - REKONI_URL=${REKONI_INTERNAL_URL}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
-      - HULYLAKE_URL=http://huly.local:8096
+      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
       - COMMUNICATION_API_ENABLED=true
   print:
     image: hardcoreeng/print
@@ -397,10 +404,10 @@ services:
       - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - STATS_URL=http://huly.local:4900
-      - ACCOUNTS_URL=http://huly.local:3000
+      - STATS_URL=${STATS_INTERNAL_URL}
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
-      - FRONT_URL=http://huly.local:8087
+      - FRONT_URL=http://front:8080
   sign:
     image: hardcoreeng/sign
     extra_hosts:
@@ -417,11 +424,11 @@ services:
       - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - CERTIFICATE_PATH=/var/cfg/certificate.p12
       - SERVICE_ID=sign-service
       - BRANDING_PATH=/var/cfg/branding.json
-      - STATS_URL=http://huly.local:4900
+      - STATS_URL=${STATS_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
   # aiBot:
   #   image: hardcoreeng/ai-bot
@@ -431,17 +438,19 @@ services:
   #     - 'huly.local:host-gateway'
   #   restart: unless-stopped
   #   environment:
-  #     - SERVER_SECRET=secret
+  #     - SERVER_SECRET=${HULY_SHARED_SECRET}
   #     - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
   #     - QUEUE_CONFIG=${QUEUE_CONFIG}
-  #     - ACCOUNTS_URL=http://huly.local:3000
+  #     - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
   #     - STORAGE_CONFIG=${STORAGE_CONFIG}
   #     - FIRST_NAME=Jolie
   #     - LAST_NAME=AI
   #     - PASSWORD=password
   #     - AVATAR_PATH=./avatar.png
   #     - AVATAR_CONTENT_TYPE=.png
-  #     - STATS_URL=http://huly.local:4900
+  #     - STATS_URL=${STATS_INTERNAL_URL}
   # #      - LOVE_ENDPOINT=http://huly.local:8096
   # #      - OPENAI_API_KEY=token
   analytics:
@@ -455,8 +464,8 @@ services:
       - SECRET=secret
       - PORT=4017
       - SERVICE_ID=analytics-collector-service
-      - ACCOUNTS_URL=http://huly.local:3000
-      - STATS_URL=http://huly.local:4900
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
       # - POSTHOG_HOST=${POSTHOG_HOST}
       # - POSTHOG_API_KEY=${POSTHOG_API_KEY}
@@ -475,9 +484,11 @@ services:
       - SECRET=secret
       - SERVICE_ID=export-service
       - DB_URL=${DB_CR_URL}
-      - STATS_URL=http://huly.local:4900
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
     restart: unless-stopped
   datalake:
@@ -498,9 +509,11 @@ services:
     environment:
       - PORT=4030
       - SECRET=secret
-      - ACCOUNTS_URL=http://huly.local:3000
-      - STATS_URL=http://huly.local:4900
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - BUCKETS=blobs,eu|http://minio:9000?accessKey=minioadmin&secretKey=minioadmin
       - REGION=cockroach
       - QUEUE_CONFIG=${QUEUE_CONFIG}
@@ -518,7 +531,7 @@ services:
     ports:
       - 8096:8096
     environment:
-      - HULY_TOKEN_SECRET=secret
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
       - HULY_DB_CONNECTION=${DB_CR_URL}
       - AWS_ENDPOINT_URL=http://minio:9000
       - AWS_REGION=local
@@ -536,7 +549,7 @@ services:
       - 8094:8094
     environment:
       - HULY_DB_CONNECTION=${DB_CR_URL}
-      - HULY_TOKEN_SECRET=secret
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
     restart: unless-stopped
   hulygun:
     image: hardcoreeng/hulygun
@@ -550,8 +563,8 @@ services:
     environment:
       - HULY_LOG=debug
       - HULY_KAFKA_BOOTSTRAP=redpanda:9092
-      - HULY_TOKEN_SECRET=secret
-      - HULY_ACCOUNT_SERVICE=http://huly.local:3000
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
+      - HULY_ACCOUNT_SERVICE=${ACCOUNT_INTERNAL_URL}
     restart: unless-stopped
   hulypulse:
     image: hardcoreeng/hulypulse
@@ -563,6 +576,7 @@ services:
     environment:
       - HULY_REDIS_URLS=redis://redis:6379
       - HULY_BIND_PORT=8099
+      - HULY_TOKEN_SECRET=${HULY_SHARED_SECRET}
     restart: unless-stopped
 
   process-service:
@@ -576,7 +590,7 @@ services:
         condition: service_started
     environment:
       - SECRET=secret
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - QUEUE_REGION=cockroach
     restart: unless-stopped
@@ -593,6 +607,8 @@ services:
         condition: service_started
     environment:
       - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - QUEUE_REGION=cockroach
     restart: unless-stopped
@@ -609,7 +625,7 @@ services:
       - SERVICE_ID=events-processor
       - LOG_LEVEL=debug
       - SECRET=secret
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - QUEUE_REGION=cockroach
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
@@ -625,8 +641,8 @@ services:
   #        condition: service_started
   #    environment:
   #      - SECRET=secret
-  #      - ACCOUNTS_URL=http://huly.local:3000
-  #      - HULYLAKE_URL=http://huly.local:8096
+  #      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+  #      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
   #      - QUEUE_CONFIG=${QUEUE_CONFIG}
   #      - QUEUE_REGION=cockroach
   #      - OPENAI_API_KEY=
@@ -646,10 +662,12 @@ services:
         condition: service_started
     environment:
       - SECRET=secret
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - ACCOUNTS_DB_URL=${DB_CR_URL}
-      - STATS_URL=http://huly.local:4900
+      - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - REGION=cockroach
       - BUCKET_NAME=backups
       - INTERVAL=60
@@ -675,8 +693,8 @@ services:
     environment:
       - PORT=4039
       - SECRET=secret
-      - ACCOUNTS_URL=http://huly.local:3000
-      - STATS_URL=http://huly.local:4900
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - BUCKET_NAME=backups
       - STORAGE=minio|minio?accessKey=minioadmin&secretKey=minioadmin
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
@@ -697,15 +715,17 @@ services:
     environment:
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - REGION=cockroach
-      - SERVER_SECRET=secret
-      - STATS_URL=http://huly.local:4900
+      - SERVER_SECRET=${HULY_SHARED_SECRET}
+      - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - ACCOUNTS_URL=http://huly.local:3000
+      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - COMMUNICATION_TIME_LOGGING_ENABLED=true
       - COMMUNICATION_API_ENABLED=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
-      - HYLYLAKE_URL=http://huly.local:8096
+      - HYLYLAKE_URL=${HULYLAKE_INTERNAL_URL}
     restart: unless-stopped
   jaeger:
     image: jaegertracing/all-in-one:latest
