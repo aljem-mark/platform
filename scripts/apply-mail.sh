@@ -24,6 +24,28 @@
 #
 # `--no-deps` plus naming the service means no neighbour container is created,
 # started or recreated, so the override's secrets are never re-applied.
+# ---------------------------------------------------------------------------
+# Rollback — this deploy is ADDITIVE, not a replace: `mail` never had an image
+# or a container on this box, so nothing is overwritten.
+#   * Before the first run of this script (runbook step 7): nothing to undo.
+#     Everything up to here builds one image and appends one secret line; no
+#     running container is touched until this script executes.
+#   * After a run:      docker rm -f dev-mail-1
+#     returns prod to its pre-change state ("no mail service"). This script uses
+#     --no-deps and recreates ONLY mail, so the running min stack is untouched.
+#   * Secret:           remove the single appended line from
+#     /etc/wedidwork/secrets.env (grep -v '^PLUNK_SMTP_PASSWORD=' ... > tmp &&
+#     mv), as root. It is additive — nothing else in that file was modified.
+#   * Repo side:        git checkout 7a205607c      # previous prod revision
+#   * Pre-flight:       the `docker compose ... config | grep ...` merge check in
+#     docs/api/README.md section 6 step 2 belongs to FULL-STACK deploys only.
+#     The mail-only path sources the existing override untouched; it is not needed.
+#   * Known gap:        dev/docker-compose.yaml declares `image: hardcoreeng/mail`
+#     with no tag, so compose resolves :latest and the NEXT recreate has no pinned
+#     image to fall back to. Tracked as (B) ledger item #4 — not this incident.
+# ---------------------------------------------------------------------------
+
+
 set -euo pipefail
 
 SECRETS=/etc/wedidwork/secrets.env
