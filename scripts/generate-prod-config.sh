@@ -6,7 +6,8 @@
 # Usage (from the repo root):
 #   bash scripts/generate-prod-config.sh                     # public deployment (prompts for domain)
 #   bash scripts/generate-prod-config.sh --domain wedid.work
-#   bash scripts/generate-prod-config.sh --local             # local stack: huly.local, public URLs left empty
+#   bash scripts/generate-prod-config.sh --local             # local MIN stack: only the services that actually run
+#   bash scripts/generate-prod-config.sh --full              # local FULL profile: keep every service URL
 #   bash scripts/generate-prod-config.sh --rotate-secret     # new HULY_SHARED_SECRET
 #   bash scripts/generate-prod-config.sh --dry-run           # list placeholders only
 #
@@ -14,9 +15,11 @@
 #   * copies dev/.env.example -> dev/.env (gitignored; an existing file is backed
 #     up to dev/.env.bak first)
 #   * substitutes REPLACE_ME_DOMAIN with your domain and fills the browser-facing
-#     *_PUBLIC_URL keys from it; with --local it writes the huly.local values instead
-#     and leaves those keys EMPTY (the compose then falls back to its own
-#     http://huly.local:<port> defaults)
+#     *_PUBLIC_URL keys from it. With --local (the documented min stack) it leaves the
+#     keys empty so the compose falls back to http://huly.local:<port>, and BLANKS the
+#     services that the min stack does not start (stats/preview/link-preview/print/sign/
+#     export/pulse/backup + the integrations) because a URL for a stopped service is a
+#     dead connection. --full keeps those URLs for a `--profile full` run
 #   * sets HULY_SHARED_SECRET (openssl rand -hex 32) — it REUSES the value already
 #     present in dev/.env unless --rotate-secret is passed, so a redeploy does not
 #     log every user out and does not invalidate existing API tokens
@@ -57,11 +60,13 @@ DOMAIN=""
 DRY_RUN=false
 ROTATE_SECRET=false
 LOCAL=false
+FULL=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --local) LOCAL=true; shift ;;
+    --full) FULL=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --rotate-secret) ROTATE_SECRET=true; shift ;;
     -h|--help) sed -n '2,/^$/p' "$0"; exit 0 ;;
@@ -101,13 +106,17 @@ fi
 
 # ── collect and validate every input BEFORE writing anything ────────────────
 
-if [[ "$LOCAL" == true ]]; then
+if [[ "$LOCAL" == true || "$FULL" == true ]]; then
   DOMAIN="huly.local"            # not a public deployment: only used for the summary below
 elif [[ -z "$DOMAIN" ]]; then
   read -r -p "Enter your public domain (e.g. wedid.work): " DOMAIN
 fi
+if [[ "$LOCAL" == true && "$FULL" == true ]]; then
+  echo "Error: --local and --full are mutually exclusive (--local = min stack, --full = --profile full)." >&2
+  exit 1
+fi
 if [[ -z "$DOMAIN" ]]; then
-  echo "Error: a domain is required (or pass --local for a local stack)." >&2
+  echo "Error: a domain is required (or pass --local / --full for a local stack)." >&2
   exit 1
 fi
 
@@ -155,19 +164,42 @@ cp "$TEMPLATE" "$TMP"
 sed_inplace "s|REPLACE_ME_DOMAIN|${DOMAIN}|g" "$TMP"
 sed_inplace "s|REPLACE_ME_HULY_SHARED_SECRET|${SHARED_SECRET}|g" "$TMP"
 echo "  HULY_SHARED_SECRET: ${SHARED_SECRET_NOTE}"
-if [[ "$LOCAL" == true ]]; then
+if [[ "$LOCAL" == true || "$FULL" == true ]]; then
   # Local stack: the *_PUBLIC_URL keys stay EMPTY so the compose's
   # http://huly.local:<port> defaults apply (see the front service).
   sed_inplace "s|^HULY_DOMAIN=.*|HULY_DOMAIN=huly.local|" "$TMP"
   sed_inplace "s|^HULY_PUBLIC_URL=.*|HULY_PUBLIC_URL=http://huly.local:8087|" "$TMP"
   sed_inplace "s|^TRANSACTOR_PUBLIC_URL=.*|TRANSACTOR_PUBLIC_URL=ws://huly.local:3332|" "$TMP"
-  # Keep the disabled-integration keys on their local endpoints so local features work.
-  for kv in GMAIL_PUBLIC_URL=http://huly.local:8093 CALENDAR_PUBLIC_URL=http://huly.local:8095 \
-            TELEGRAM_PUBLIC_URL=http://huly.local:8086 GITHUB_PUBLIC_URL=http://huly.local:3500 \
-            PAYMENT_PUBLIC_URL=http://huly.local:3040; do
+  # Integrations with no service in this stack are always blank locally (feature off).
+  for kv in GMAIL_PUBLIC_URL= CALENDAR_PUBLIC_URL= TELEGRAM_PUBLIC_URL= GITHUB_PUBLIC_URL= PAYMENT_PUBLIC_URL=; do
     sed_inplace "s|^${kv%%=*}=.*|${kv}|" "$TMP"
   done
-  echo "  public URLs: LOCAL (empty *_PUBLIC_URL -> compose falls back to huly.local)"
+  sed_inplace "s|^FRONT_DISABLED_FEATURES=.*|FRONT_DISABLED_FEATURES=auto-translate,mailboxes,calendar,telegram|" "$TMP"
+  if [[ "$FULL" == true ]]; then
+    # 'rush docker:up --profile full': those services DO run, so point at their endpoints.
+    while IFS='|' read -r key value; do
+      [[ -z "$key" ]] && continue
+      sed_inplace "s|^${key}=.*|${key}=${value}|" "$TMP"
+    done <<'FULL_URLS'
+STATS_PUBLIC_URL|http://huly.local:4900
+PREVIEW_PUBLIC_URL|http://huly.local:4040
+LINK_PREVIEW_PUBLIC_URL|http://huly.local:4041
+PRINT_PUBLIC_URL|http://huly.local:4005
+SIGN_PUBLIC_URL|http://huly.local:4006
+EXPORT_PUBLIC_URL|http://huly.local:4009
+PULSE_PUBLIC_URL|ws://huly.local:8099/ws
+BACKUP_PUBLIC_URL|http://huly.local:4039/api/backup
+FULL_URLS
+    echo "  public URLs: LOCAL FULL profile (--profile full services on huly.local)"
+  else
+    # The min stack excludes these (profiles: ["full"] in docker-compose.min.yaml), so a
+    # non-empty URL would be a dead connection: blank = the client's "feature off" signal.
+    for key in STATS_PUBLIC_URL PREVIEW_PUBLIC_URL LINK_PREVIEW_PUBLIC_URL PRINT_PUBLIC_URL \
+               SIGN_PUBLIC_URL EXPORT_PUBLIC_URL PULSE_PUBLIC_URL BACKUP_PUBLIC_URL; do
+      sed_inplace "s|^${key}=.*|${key}=|" "$TMP"
+    done
+    echo "  public URLs: LOCAL min (services outside the min stack are blanked)"
+  fi
 else
   # Deployment: fill every browser-facing URL from the domain. These are exactly the
   # values the front service publishes in /config.json. An empty scheme means "blank it"

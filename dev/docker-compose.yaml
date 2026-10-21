@@ -318,10 +318,10 @@ services:
       # TELEGRAM/GITHUB/PAYMENT) deliberately stay literals: the client treats an EMPTY
       # URL as "feature off", which the :- default would defeat.
       - ACCOUNTS_URL=${ACCOUNT_PUBLIC_URL:-http://huly.local:3000}
-      - STATS_URL=${STATS_PUBLIC_URL:-http://huly.local:4900}
+      - STATS_URL=${STATS_PUBLIC_URL-http://huly.local:4900}
       - FILES_URL=${FILES_PUBLIC_URL:-http://huly.local:4030/blob/:workspace/:blobId/:filename}
       - UPLOAD_URL=/files
-      - PREVIEW_URL=${PREVIEW_PUBLIC_URL:-http://huly.local:4040}
+      - PREVIEW_URL=${PREVIEW_PUBLIC_URL-http://huly.local:4040}
       # Integrations with no service in this stack: use the `-` form (not `:-`) so an
       # EMPTY value in dev/.env still disables the feature client-side on a deployment,
       # while local dev keeps the published huly.local endpoint below.
@@ -332,8 +332,8 @@ services:
       - COLLABORATOR_URL=${COLLABORATOR_PUBLIC_URL:-ws://huly.local:3078}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - GITHUB_URL=${GITHUB_PUBLIC_URL-http://huly.local:3500}
-      - PRINT_URL=${PRINT_PUBLIC_URL:-http://huly.local:4005}
-      - SIGN_URL=${SIGN_PUBLIC_URL:-http://huly.local:4006}
+      - PRINT_URL=${PRINT_PUBLIC_URL-http://huly.local:4005}
+      - SIGN_URL=${SIGN_PUBLIC_URL-http://huly.local:4006}
       #      - ANALYTICS_COLLECTOR_URL=http://huly.local:4017
       - DESKTOP_UPDATES_URL=https://dist.huly.io
       - DESKTOP_UPDATES_CHANNEL=dev
@@ -342,16 +342,16 @@ services:
       - STREAM_URL=${STREAM_PUBLIC_URL:-http://huly.local:1080/recording}
       - PAYMENT_URL=${PAYMENT_PUBLIC_URL-http://huly.local:3040}
       - COMMUNICATION_API_ENABLED=true
-      - BACKUP_URL=${BACKUP_PUBLIC_URL:-http://huly.local:4039/api/backup}
+      - BACKUP_URL=${BACKUP_PUBLIC_URL-http://huly.local:4039/api/backup}
       - EXCLUDED_APPLICATIONS_FOR_ANONYMOUS=[]
       - DISABLED_FEATURES=${FRONT_DISABLED_FEATURES-auto-translate,mailboxes}
       # - DISABLE_SIGNUP=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
-      - PULSE_URL=${PULSE_PUBLIC_URL:-ws://huly.local:8099/ws}
+      - PULSE_URL=${PULSE_PUBLIC_URL-ws://huly.local:8099/ws}
       - DATALAKE_URL=${DATALAKE_PUBLIC_URL:-http://huly.local:4030}
       - HULYLAKE_URL=${HULYLAKE_PUBLIC_URL:-http://huly.local:8096}
-      - EXPORT_URL=${EXPORT_PUBLIC_URL:-http://huly.local:4009}
-      - LINK_PREVIEW_URL=${LINK_PREVIEW_PUBLIC_URL:-http://huly.local:4041}
+      - EXPORT_URL=${EXPORT_PUBLIC_URL-http://huly.local:4009}
+      - LINK_PREVIEW_URL=${LINK_PREVIEW_PUBLIC_URL-http://huly.local:4041}
     restart: unless-stopped
   transactor_cockroach:
     image: hardcoreeng/transactor
