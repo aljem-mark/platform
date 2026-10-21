@@ -4,15 +4,19 @@
 # from the committed template dev/.env.example.
 #
 # Usage (from the repo root):
-#   bash scripts/generate-prod-config.sh
+#   bash scripts/generate-prod-config.sh                     # public deployment (prompts for domain)
 #   bash scripts/generate-prod-config.sh --domain wedid.work
-#   bash scripts/generate-prod-config.sh --rotate-secret   # new HULY_SHARED_SECRET
-#   bash scripts/generate-prod-config.sh --dry-run         # list placeholders only
+#   bash scripts/generate-prod-config.sh --local             # local stack: huly.local, public URLs left empty
+#   bash scripts/generate-prod-config.sh --rotate-secret     # new HULY_SHARED_SECRET
+#   bash scripts/generate-prod-config.sh --dry-run           # list placeholders only
 #
 # What it does:
 #   * copies dev/.env.example -> dev/.env (gitignored; an existing file is backed
 #     up to dev/.env.bak first)
-#   * substitutes REPLACE_ME_DOMAIN with your domain
+#   * substitutes REPLACE_ME_DOMAIN with your domain and fills the browser-facing
+#     *_PUBLIC_URL keys from it; with --local it writes the huly.local values instead
+#     and leaves those keys EMPTY (the compose then falls back to its own
+#     http://huly.local:<port> defaults)
 #   * sets HULY_SHARED_SECRET (openssl rand -hex 32) — it REUSES the value already
 #     present in dev/.env unless --rotate-secret is passed, so a redeploy does not
 #     log every user out and does not invalidate existing API tokens
@@ -52,10 +56,12 @@ TMP="${OUTPUT}.tmp"
 DOMAIN=""
 DRY_RUN=false
 ROTATE_SECRET=false
+LOCAL=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --domain) DOMAIN="${2:-}"; shift 2 ;;
+    --local) LOCAL=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --rotate-secret) ROTATE_SECRET=true; shift ;;
     -h|--help) sed -n '2,/^$/p' "$0"; exit 0 ;;
@@ -95,11 +101,13 @@ fi
 
 # ── collect and validate every input BEFORE writing anything ────────────────
 
-if [[ -z "$DOMAIN" ]]; then
+if [[ "$LOCAL" == true ]]; then
+  DOMAIN="huly.local"            # not a public deployment: only used for the summary below
+elif [[ -z "$DOMAIN" ]]; then
   read -r -p "Enter your public domain (e.g. wedid.work): " DOMAIN
 fi
 if [[ -z "$DOMAIN" ]]; then
-  echo "Error: a domain is required." >&2
+  echo "Error: a domain is required (or pass --local for a local stack)." >&2
   exit 1
 fi
 
@@ -147,6 +155,58 @@ cp "$TEMPLATE" "$TMP"
 sed_inplace "s|REPLACE_ME_DOMAIN|${DOMAIN}|g" "$TMP"
 sed_inplace "s|REPLACE_ME_HULY_SHARED_SECRET|${SHARED_SECRET}|g" "$TMP"
 echo "  HULY_SHARED_SECRET: ${SHARED_SECRET_NOTE}"
+if [[ "$LOCAL" == true ]]; then
+  # Local stack: the *_PUBLIC_URL keys stay EMPTY so the compose's
+  # http://huly.local:<port> defaults apply (see the front service).
+  sed_inplace "s|^HULY_DOMAIN=.*|HULY_DOMAIN=huly.local|" "$TMP"
+  sed_inplace "s|^HULY_PUBLIC_URL=.*|HULY_PUBLIC_URL=http://huly.local:8087|" "$TMP"
+  sed_inplace "s|^TRANSACTOR_PUBLIC_URL=.*|TRANSACTOR_PUBLIC_URL=ws://huly.local:3332|" "$TMP"
+  # Keep the disabled-integration keys on their local endpoints so local features work.
+  for kv in GMAIL_PUBLIC_URL=http://huly.local:8093 CALENDAR_PUBLIC_URL=http://huly.local:8095 \
+            TELEGRAM_PUBLIC_URL=http://huly.local:8086 GITHUB_PUBLIC_URL=http://huly.local:3500 \
+            PAYMENT_PUBLIC_URL=http://huly.local:3040; do
+    sed_inplace "s|^${kv%%=*}=.*|${kv}|" "$TMP"
+  done
+  echo "  public URLs: LOCAL (empty *_PUBLIC_URL -> compose falls back to huly.local)"
+else
+  # Deployment: fill every browser-facing URL from the domain. These are exactly the
+  # values the front service publishes in /config.json. An empty scheme means "blank it"
+  # (the integration is disabled client-side) — that only works because the compose uses
+  # the `${VAR-default}` form for those keys.
+  while IFS='|' read -r key scheme path; do
+    [[ -z "$key" ]] && continue
+    if [[ -z "$scheme" ]]; then
+      sed_inplace "s|^${key}=.*|${key}=|" "$TMP"
+    else
+      sed_inplace "s|^${key}=.*|${key}=${scheme}://${DOMAIN}${path}|" "$TMP"
+    fi
+  done <<'PUBLIC_URLS'
+ACCOUNT_PUBLIC_URL|https|/_accounts
+COLLABORATOR_PUBLIC_URL|wss|/collaborator
+FILES_PUBLIC_URL|https|/files/:workspace/:blobId/:filename
+DATALAKE_PUBLIC_URL|https|/datalake
+HULYLAKE_PUBLIC_URL|https|/hulylake
+PULSE_PUBLIC_URL|wss|/pulse/ws
+STATS_PUBLIC_URL|https|/stats
+REKONI_PUBLIC_URL|https|/rekoni
+PREVIEW_PUBLIC_URL|https|/preview
+LINK_PREVIEW_PUBLIC_URL|https|/link-preview
+PRINT_PUBLIC_URL|https|/print
+SIGN_PUBLIC_URL|https|/sign
+BACKUP_PUBLIC_URL|https|/backup/api/backup
+EXPORT_PUBLIC_URL|https|/export
+BRANDING_PUBLIC_URL|https|/branding.json
+STREAM_PUBLIC_URL|https|/stream/recording
+GMAIL_PUBLIC_URL||
+CALENDAR_PUBLIC_URL||
+TELEGRAM_PUBLIC_URL||
+GITHUB_PUBLIC_URL||
+PAYMENT_PUBLIC_URL||
+PUBLIC_URLS
+  echo "  public URLs: https://${DOMAIN}/… (browser-facing, from *_PUBLIC_URL)"
+  # Blanking the calendar/telegram URLs also disables those client features.
+  sed_inplace "s|^FRONT_DISABLED_FEATURES=.*|FRONT_DISABLED_FEATURES=auto-translate,mailboxes,calendar,telegram|" "$TMP"
+fi
 # Escape sed replacement metacharacters so a secret containing & | \ survives intact.
 ESCAPED_SMTP_PASSWORD="$(printf '%s' "$SMTP_PASSWORD_VALUE" | sed -e 's/[\\&|]/\\&/g')"
 sed_inplace "s|REPLACE_ME_PLUNK_SMTP_PASSWORD|${ESCAPED_SMTP_PASSWORD}|g" "$TMP"
@@ -190,7 +250,11 @@ echo "       rush docker:up:min"
 echo "     ...or directly:"
 echo "       cd dev && docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate"
 echo "  4. Verify:"
-echo "       curl -s https://${DOMAIN}/config.json | tr ',' '\\n' | grep huly.local   # -> empty on a server"
+if [[ "$LOCAL" == true ]]; then
+  echo "       open http://huly.local:8087 — the app must load with no ERR_NAME_NOT_RESOLVED"
+else
+  echo "       curl -s https://${DOMAIN}/config.json | tr ',' '\\n' | grep huly.local   # -> empty"
+fi
 echo "       docker compose -f docker-compose.yaml -f docker-compose.min.yaml logs mail   # real send must not 401/535"
 echo
 echo "NOTE: the sending domain must be verified with the mail provider and carry"
