@@ -1,3 +1,11 @@
+# RETIRED — superseded by dev/.env.example + scripts/generate-prod-config.sh.
+#
+# This per-service Compose override flow is no longer used: deployment values now
+# live in a single gitignored `dev/.env` (generated from dev/.env.example), which
+# Compose loads automatically when run from dev/. Kept for reference only — do not
+# extend it, and never commit a filled copy.
+#
+# ─────────────────────────────────────────────────────────────────────────────
 # Production configuration template for a public domain (e.g. wedid.work).
 #
 # HOW TO USE ON THE SERVER
