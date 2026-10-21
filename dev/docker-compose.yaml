@@ -166,7 +166,7 @@ services:
     restart: unless-stopped
 
   # Transactional mail relay (pod-mail, image hardcoreeng/mail) — an SMTP *CLIENT*:
-  # it always needs an external relay (currently Plunk, smtp.useplunk.com). SOURCE must
+  # it always needs an external relay (currently Plunk, next-smtp.useplunk.com). SOURCE must
   # be a sender domain verified with the provider, with SPF + DKIM (ideally DMARC) in
   # DNS, or mail is rejected / lands in spam.
   #
@@ -177,7 +177,9 @@ services:
   # nor protect anything (setting API_KEY would 401 every send). Network isolation is the
   # only auth control here; this is a deliberate, documented decision.
   #
-  # SMTP_USERNAME / SMTP_PORT / SMTP_HOST are constants (non-secret). SMTP_PASSWORD is
+  # SMTP_USERNAME / SMTP_PORT / SMTP_HOST are constants (non-secret) taken from the
+  # provider dashboard — note Plunk moved to next-smtp.useplunk.com:2465/2587; the
+  # legacy smtp.useplunk.com:465 answers AUTH but returns 535 for current keys. SMTP_PASSWORD is
   # user-supplied and never generated — it comes from the deployment environment, i.e.
   # the server's root-only /etc/wedidwork/secrets.env (see dev/secrets.env.example) or
   # the local dev/.env. Empty = the relay cannot authenticate, so no mail is delivered.
@@ -190,8 +192,12 @@ services:
     environment:
       - PORT=8097
       - SOURCE=no-reply@wedid.work
-      - SMTP_HOST=smtp.useplunk.com
-      - SMTP_PORT=465
+      # Endpoint as shown in the Plunk dashboard (SMTP tab). The legacy
+      # smtp.useplunk.com:465 still answers AUTH but REJECTS the current project
+      # credential with 535 — verified with the same key: 535 there, 235 here.
+      - SMTP_HOST=next-smtp.useplunk.com
+      # 2465 = implicit TLS (needs SMTP_TLS_MODE=secure); 2587 = STARTTLS
+      - SMTP_PORT=2465
       - SMTP_USERNAME=plunk
       - SMTP_PASSWORD=${PLUNK_SMTP_PASSWORD}
       - SMTP_TLS_MODE=secure
