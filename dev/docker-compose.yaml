@@ -165,6 +165,43 @@ services:
       - 6379:6379
     restart: unless-stopped
 
+  # Transactional mail relay (pod-mail, image hardcoreeng/mail) — an SMTP *CLIENT*:
+  # it always needs an external relay (currently Plunk, next-smtp.useplunk.com). SOURCE must
+  # be a sender domain verified with the provider, with SPF + DKIM (ideally DMARC) in
+  # DNS, or mail is rejected / lands in spam.
+  #
+  # SECURITY: NO published ports and NO nginx location — compose-network reachability
+  # only. Its POST /send is UNAUTHENTICATED there: pod-mail compares an `apiKey` field in
+  # the request BODY (src/main.ts), while every in-scope caller sends an
+  # `Authorization: Bearer …` header instead, so API_KEY / MAIL_AUTH_TOKEN neither match
+  # nor protect anything (setting API_KEY would 401 every send). Network isolation is the
+  # only auth control here; this is a deliberate, documented decision.
+  #
+  # SMTP_USERNAME / SMTP_PORT / SMTP_HOST are constants (non-secret) taken from the
+  # provider dashboard — note Plunk moved to next-smtp.useplunk.com:2465/2587; the
+  # legacy smtp.useplunk.com:465 answers AUTH but returns 535 for current keys. SMTP_PASSWORD is
+  # user-supplied and never generated — it comes from the deployment environment, i.e.
+  # the server's root-only /etc/wedidwork/secrets.env (see dev/secrets.env.example) or
+  # the local dev/.env. Empty = the relay cannot authenticate, so no mail is delivered.
+  #
+  # pod-mail is NOT in `rush docker:min`'s --to list and there is no `build:` key, so a
+  # bare `up` would pull a stale/absent hardcoreeng/mail:latest — build it explicitly:
+  #   rush docker:build --to @hcengineering/pod-mail     # -> hardcoreeng/mail[:<git-rev>]
+  mail:
+    image: hardcoreeng/mail
+    environment:
+      - PORT=8097
+      - SOURCE=no-reply@wedid.work
+      # Endpoint as shown in the Plunk dashboard (SMTP tab). The legacy
+      # smtp.useplunk.com:465 still answers AUTH but REJECTS the current project
+      # credential with 535 — verified with the same key: 535 there, 235 here.
+      - SMTP_HOST=next-smtp.useplunk.com
+      # 2465 = implicit TLS (needs SMTP_TLS_MODE=secure); 2587 = STARTTLS
+      - SMTP_PORT=2465
+      - SMTP_USERNAME=plunk
+      - SMTP_PASSWORD=${PLUNK_SMTP_PASSWORD}
+      - SMTP_TLS_MODE=secure
+    restart: unless-stopped
   account:
     image: hardcoreeng/account
     extra_hosts:
@@ -183,13 +220,13 @@ services:
       - STATS_URL=${STATS_INTERNAL_URL}
       - WORKSPACE_LIMIT_PER_USER=10000
       - DB_URL=${DB_CR_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       # - DB_NS=account-2
       # Pass only one region to disallow selection for new workspaces.
       - REGION_INFO=cockroach|CockroachDB
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - MAIL_URL=
+      # Compose-network address (no published port on `mail`): enables signup
+      # confirmation / OTP / invite / password-reset email AND flips forceConfirmation on.
+      - MAIL_URL=http://mail:8097
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - FRONT_URL=http://front:8080
       - LAST_NAME_FIRST=true
@@ -232,7 +269,6 @@ services:
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - DB_URL=${DB_CR_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - STATS_URL=${STATS_INTERNAL_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
@@ -240,7 +276,8 @@ services:
       - BRANDING_PATH=/var/cfg/branding.json
       - BACKUP_STORAGE=${BACKUP_STORAGE_CONFIG}
       - BACKUP_BUCKET=${BACKUP_BUCKET_NAME}
-      - MAIL_URL=
+      # pod-mail address for server-side notification email (pods/server __start.ts).
+      - MAIL_URL=http://mail:8097
       # - INIT_WORKSPACE=staging-dev
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
     restart: unless-stopped
@@ -275,38 +312,52 @@ services:
       - SERVER_PORT=8080
       - SERVER_SECRET=${HULY_SHARED_SECRET}
       - DOC_MODE=safe
-      - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
-      - STATS_URL=${STATS_INTERNAL_URL}
-      - FILES_URL=${DATALAKE_INTERNAL_URL}/blob/:workspace/:blobId/:filename
+      # --- BROWSER-FACING values -----------------------------------------------
+      # Everything below is delivered to the BROWSER through /config.json (plus the
+      # extraConfig spread), so it must be resolvable BY THE BROWSER — never a compose
+      # container name. It is driven by the *_PUBLIC_URL keys in dev/.env:
+      #   * local dev  : leave them empty -> the http://huly.local:<port> default below
+      #                  applies (ports are published, /etc/hosts maps huly.local)
+      #   * deployment : dev/.env (or the deployment env) sets them to the public
+      #                  https://<domain>/... values (see dev/.env.example)
+      # The two integrations that are disabled rather than exposed (GMAIL/CALENDAR/
+      # TELEGRAM/GITHUB/PAYMENT) deliberately stay literals: the client treats an EMPTY
+      # URL as "feature off", which the :- default would defeat.
+      - ACCOUNTS_URL=${ACCOUNT_PUBLIC_URL:-http://huly.local:3000}
+      - STATS_URL=${STATS_PUBLIC_URL-http://huly.local:4900}
+      - FILES_URL=${FILES_PUBLIC_URL:-http://huly.local:4030/blob/:workspace/:blobId/:filename}
       - UPLOAD_URL=/files
-      - PREVIEW_URL=http://huly.local:4040
-      - GMAIL_URL=http://huly.local:8093
-      - CALENDAR_URL=http://huly.local:8095
-      - TELEGRAM_URL=http://huly.local:8086
-      - REKONI_URL=${REKONI_INTERNAL_URL}
-      - COLLABORATOR_URL=ws://huly.local:3078
+      - PREVIEW_URL=${PREVIEW_PUBLIC_URL-http://huly.local:4040}
+      # Integrations with no service in this stack: use the `-` form (not `:-`) so an
+      # EMPTY value in dev/.env still disables the feature client-side on a deployment,
+      # while local dev keeps the published huly.local endpoint below.
+      - GMAIL_URL=${GMAIL_PUBLIC_URL-http://huly.local:8093}
+      - CALENDAR_URL=${CALENDAR_PUBLIC_URL-http://huly.local:8095}
+      - TELEGRAM_URL=${TELEGRAM_PUBLIC_URL-http://huly.local:8086}
+      - REKONI_URL=${REKONI_PUBLIC_URL:-http://huly.local:4004}
+      - COLLABORATOR_URL=${COLLABORATOR_PUBLIC_URL:-ws://huly.local:3078}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
-      - GITHUB_URL=http://huly.local:3500
-      - PRINT_URL=http://huly.local:4005
-      - SIGN_URL=http://huly.local:4006
+      - GITHUB_URL=${GITHUB_PUBLIC_URL-http://huly.local:3500}
+      - PRINT_URL=${PRINT_PUBLIC_URL-http://huly.local:4005}
+      - SIGN_URL=${SIGN_PUBLIC_URL-http://huly.local:4006}
       #      - ANALYTICS_COLLECTOR_URL=http://huly.local:4017
       - DESKTOP_UPDATES_URL=https://dist.huly.io
       - DESKTOP_UPDATES_CHANNEL=dev
       - DESKTOP_UPDATES_CHANNELS=dev;tracex:dev-tracex
-      - BRANDING_URL=http://huly.local:8087/branding.json
-      - STREAM_URL=http://huly.local:1080/recording
-      - PAYMENT_URL=http://huly.local:3040
+      - BRANDING_URL=${BRANDING_PUBLIC_URL:-http://huly.local:8087/branding.json}
+      - STREAM_URL=${STREAM_PUBLIC_URL:-http://huly.local:1080/recording}
+      - PAYMENT_URL=${PAYMENT_PUBLIC_URL-http://huly.local:3040}
       - COMMUNICATION_API_ENABLED=true
-      - BACKUP_URL=http://huly.local:4039/api/backup,
+      - BACKUP_URL=${BACKUP_PUBLIC_URL-http://huly.local:4039/api/backup}
       - EXCLUDED_APPLICATIONS_FOR_ANONYMOUS=[]
-      - DISABLED_FEATURES=auto-translate,mailboxes
+      - DISABLED_FEATURES=${FRONT_DISABLED_FEATURES-auto-translate,mailboxes}
       # - DISABLE_SIGNUP=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
-      - PULSE_URL=ws://huly.local:8099/ws
-      - DATALAKE_URL=http://huly.local:4030
-      - HULYLAKE_URL=${HULYLAKE_INTERNAL_URL}
-      - EXPORT_URL=http://huly.local:4009
-      - LINK_PREVIEW_URL=http://huly.local:4041
+      - PULSE_URL=${PULSE_PUBLIC_URL-ws://huly.local:8099/ws}
+      - DATALAKE_URL=${DATALAKE_PUBLIC_URL:-http://huly.local:4030}
+      - HULYLAKE_URL=${HULYLAKE_PUBLIC_URL:-http://huly.local:8096}
+      - EXPORT_URL=${EXPORT_PUBLIC_URL-http://huly.local:4009}
+      - LINK_PREVIEW_URL=${LINK_PREVIEW_PUBLIC_URL-http://huly.local:4041}
     restart: unless-stopped
   transactor_cockroach:
     image: hardcoreeng/transactor
@@ -333,7 +384,6 @@ services:
       - FULLTEXT_URL=${FULLTEXT_INTERNAL_URL}
       - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - METRICS_CONSOLE=false
       - METRICS_FILE=metrics.txt
@@ -382,7 +432,6 @@ services:
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - DB_URL=${DB_CR_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - FULLTEXT_DB_URL=${ELASTIC_INTERNAL_URL}
       - ELASTIC_INDEX_NAME=local_storage_index # Same index for simplicity
       - STORAGE_CONFIG=${STORAGE_CONFIG}
@@ -430,6 +479,7 @@ services:
       - BRANDING_PATH=/var/cfg/branding.json
       - STATS_URL=${STATS_INTERNAL_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
   # aiBot:
   #   image: hardcoreeng/ai-bot
   #   ports:
@@ -440,8 +490,6 @@ services:
   #   environment:
   #     - SERVER_SECRET=${HULY_SHARED_SECRET}
   #     - DB_URL=${DB_CR_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
   #     - QUEUE_CONFIG=${QUEUE_CONFIG}
   #     - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
   #     - STORAGE_CONFIG=${STORAGE_CONFIG}
@@ -485,7 +533,6 @@ services:
       - SERVICE_ID=export-service
       - DB_URL=${DB_CR_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - STATS_URL=${STATS_INTERNAL_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
@@ -512,7 +559,6 @@ services:
       - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}
       - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - BUCKETS=blobs,eu|http://minio:9000?accessKey=minioadmin&secretKey=minioadmin
       - REGION=cockroach
@@ -608,7 +654,6 @@ services:
     environment:
       - DB_URL=${DB_CR_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - QUEUE_REGION=cockroach
     restart: unless-stopped
@@ -667,7 +712,6 @@ services:
       - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - REGION=cockroach
       - BUCKET_NAME=backups
       - INTERVAL=60
@@ -718,7 +762,6 @@ services:
       - SERVER_SECRET=${HULY_SHARED_SECRET}
       - STATS_URL=${STATS_INTERNAL_URL}
       - DB_URL=${DB_CR_URL}
-      - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - ACCOUNTS_URL=${ACCOUNT_INTERNAL_URL}

@@ -63,7 +63,27 @@ jspm_packages/
 .yarn-integrity
 
 # dotenv environment variables file
-# .env
+# dev/.env holds REAL deployment secrets (shared token secret, DB credentials,
+# mail provider key). It must NEVER be committed. The committed template is
+# dev/.env.example; create the real file with `bash scripts/generate-prod-config.sh`
+# or `cp dev/.env.example dev/.env`.
+.env
+.env.*
+.env-*
+!.env.example
+# Server-side deployment secrets (root-only, OUTSIDE the repo normally). The
+# documented keys live in dev/secrets.env.example; a real secrets.env must never
+# be tracked anywhere in the tree.
+secrets.env
+# ...backups and scratch copies of those secrets must never be committed either
+*.secret-backup
+*.env.backup
+*.env.bak
+*.env.pre-final-cleanup-*
+*.pre-final-cleanup-*
+dev/**/*.bak
+# retired per-service override flow (its values are generated into dev/.env now)
+dev/docker-compose.override.yaml
 
 # next.js build output
 .next
