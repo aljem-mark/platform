@@ -236,12 +236,19 @@ reference only.
    - The DB / MinIO / storage values in the template are **local defaults**: set your
      real credentials (`DB_CR_URL`, `DB_URL_PG`, `MONGO_URL`, `STORAGE_CONFIG`,
      `BACKUP_STORAGE_CONFIG`) before a production deploy.
-2. **Pre-flight** (confirm interpolation resolved — no empty or `huly.local` values where
-   a public one belongs):
+2. **Pre-flight** — verify the mail relay credential/endpoint first (the `/send` API returns
+   `200` even when the send fails, so this is the only reliable pre-check), then confirm the
+   interpolation resolved with no empty or `huly.local` value where a public one belongs:
+   ```bash
+   python3 scripts/smtp-auth-check.py --prompt      # exit 0 = AUTH OK, 1 = 535 (key or endpoint wrong)
+   ```
    ```bash
    cd dev && docker compose -f docker-compose.yaml -f docker-compose.min.yaml config \
      | grep -E 'ACCOUNTS_URL|STORAGE_CONFIG|HULY_SHARED_SECRET'
    ```
+   Take the relay host/port/TLS from the provider dashboard (`next-smtp.useplunk.com`,
+   2465 implicit TLS or 2587 STARTTLS for Plunk) — the legacy `smtp.useplunk.com:465`
+   answers AUTH but rejects current project keys with `535`.
 3. **Deploy:**
    ```bash
    cd dev && docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate
