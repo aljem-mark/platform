@@ -1,6 +1,21 @@
 #!/bin/bash
 # Supports minified mode for resource-constrained dev machines:
 #   rush docker --minified   or   rush docker:min
+#
+# The build is dispatched through the repo's own Rush bootstrap
+# (common/scripts/install-run-rush.js), which installs and runs the exact
+# @microsoft/rush version pinned in rush.json. Never call a bare `rush` from
+# this script: on hosts where PATH resolves `rush` to GNU rush (Ubuntu's
+# "Restricted User Shell", apt package `rush`), the bare call is rejected with
+# "You are not permitted to execute this command" -- or silently runs the
+# wrong tool. The bootstrap needs no global install and no PATH ordering.
+set -e
+
+# Resolve the repo root from this script's location so the bootstrap is found
+# regardless of the current working directory.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+RUSH_BOOTSTRAP="$REPO_ROOT/common/scripts/install-run-rush.js"
 
 MINIFIED=false
 for arg in "$@"; do
@@ -10,9 +25,11 @@ for arg in "$@"; do
   fi
 done
 
+cd "$REPO_ROOT"
+
 if [ "$MINIFIED" = true ]; then
   echo "Building minified docker images (excluding optional services)..."
-  rush docker:build -p 20 \
+  node "$RUSH_BOOTSTRAP" docker:build -p 20 \
     --to @hcengineering/pod-server \
     --to @hcengineering/pod-front \
     --to @hcengineering/prod \
@@ -27,7 +44,7 @@ if [ "$MINIFIED" = true ]; then
     --to @hcengineering/pod-media \
     --to @hcengineering/pod-external
 else
-  rush docker:build -p 20 \
+  node "$RUSH_BOOTSTRAP" docker:build -p 20 \
     --to @hcengineering/pod-server \
     --to @hcengineering/pod-front \
     --to @hcengineering/prod \
