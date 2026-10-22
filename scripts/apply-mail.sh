@@ -24,6 +24,75 @@
 #
 # `--no-deps` plus naming the service means no neighbour container is created,
 # started or recreated, so the override's secrets are never re-applied.
+#
+# PRE-BUILD BASELINE and ROLLBACK ANCHOR -- capture this BEFORE building
+# anything; it is the state the stack-level rollback below restores. Run as
+# `rhinax` from the repo; it writes only to /tmp.
+#
+#   cd ~/projects/we-did-work
+#   if [ -s /tmp/wedidwork.rollback-anchor ]; then          # reuse the plan's anchor
+#     ANCHOR=$(cat /tmp/wedidwork.rollback-anchor)
+#   else                                                    # else pin the current revision
+#     ANCHOR=$(git rev-parse HEAD)
+#     printf '%s\n' "$ANCHOR" > /tmp/wedidwork.rollback-anchor
+#   fi
+#   echo "anchor=$ANCHOR $(git log --oneline -1 "$ANCHOR")"
+#   git rev-parse HEAD                    # revision currently deployed
+#   sha256sum dev/docker-compose.yaml > /tmp/wedidwork.compose.sha256
+#   docker compose -f docker-compose.yaml -f docker-compose.override.yaml ps > /tmp/wedidwork.pre-build.ps
+#   docker ps -a --format '{{.Names}} {{.CreatedAt}} {{.Image}}' > /tmp/wedidwork.pre-build.containers
+#   docker images --digests | grep -E 'hardcoreeng/(mail|account|workspace)' > /tmp/wedidwork.pre-build.images
+#
+# ANCHOR SEMANTICS: the saved anchor (9e84ae3f7, "Merge PR #12", 2026-10-15
+# 12:42) is the revision immediately BEFORE bc5c78e5a (2026-10-15 13:23) added
+# the `mail:` service and MAIL_URL -- reverting dev/docker-compose.yaml to it
+# means "email off, signups auto-confirm". The anchor is a REPO revision and the
+# live stack can be older still (dev-account-1 was created 2026-10-06 with
+# MAIL_URL empty), which is why the runtime snapshots above are captured too.
+# /tmp is volatile: if the anchor file is gone after a reboot the fallback pins
+# the current HEAD, and the snapshots should be retaken before any change.
+# ---------------------------------------------------------------------------
+# STACK-LEVEL ROLLBACK -- pairs with the baseline above. This is the
+# compose/stack rollback; the mail-image rollback is the separate block below.
+#
+#   a) compose-only revert, as rhinax:
+#        cd ~/projects/we-did-work
+#        git checkout "$ANCHOR" -- dev/docker-compose.yaml
+#        git diff --stat "$ANCHOR" -- dev/docker-compose.yaml
+#      (full tree revert is `git checkout "$ANCHOR"`. The untracked
+#       dev/docker-compose.override.yaml is NOT covered by git -- never
+#       regenerate, move or delete it as part of a rollback.)
+#   b) recreate ONLY the affected services, as ROOT, under the LIVE layering:
+#        sudo -s
+#        cd /home/rhinax/projects/we-did-work/dev
+#        set -a; . /etc/wedidwork/secrets.env; set +a
+#        docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d --no-deps --force-recreate account workspace_cockroach
+#        docker compose -f docker-compose.yaml -f docker-compose.override.yaml ps
+#        exit
+#   c) verify, and know how to get back:
+#        cd ~/projects/we-did-work
+#        git diff --quiet "$ANCHOR" -- dev/docker-compose.yaml && echo "compose == anchor"
+#        git checkout HEAD -- dev/docker-compose.yaml      # undo the revert
+#        sha256sum -c /tmp/wedidwork.compose.sha256        # passes only while the
+#                                    # compose still equals the captured baseline
+#
+# TWO HAZARDS FIXED HERE -- do not "simplify" these back:
+#   1. LAYERING. The recreate uses `-f docker-compose.yaml -f
+#      docker-compose.override.yaml`, matching what is actually live. The
+#      pre-Plunk plan recreated these services under
+#      `-f docker-compose.min.yaml`, which drops the override -- and with it the
+#      SERVER_SECRET the live override supplies to the token-verifying services
+#      (confirmed on the server), so token verification breaks and every session
+#      dies. The min layering is only correct for a stack started on min.
+#   2. SECRET SOURCING. The same plan ran `set -a; . /etc/wedidwork/secrets.env`
+#      as `rhinax`, where /etc/wedidwork is 750 root:root: the source silently
+#      no-ops, leaving DB_CR_URL / QUEUE_CONFIG / STORAGE_CONFIG /
+#      HULY_SHARED_SECRET unset and the recreated services broken. Source it as
+#      root (as above) or through the root-owned wrapper -- never as rhinax.
+#
+# Keep the live SERVER_SECRET value unchanged through any rollback: it is the
+# signing secret, and rotating it logs every user out (see the secret notes in
+# scripts/generate-prod-config.sh).
 # ---------------------------------------------------------------------------
 # Rollback — this deploy is ADDITIVE, not a replace: `mail` never had an image
 # or a container on this box, so nothing is overwritten.
