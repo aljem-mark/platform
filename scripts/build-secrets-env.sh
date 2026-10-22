@@ -18,6 +18,12 @@
 # divergent short one, which needs its own reconcile). If the existing file holds a
 # different value the run aborts rather than rotating it.
 #
+# COMPLETENESS IS ENUMERATED, NOT INFERRED FROM WARNINGS: every ${REF} in either
+# compose file is required -- including `${VAR:-default}` refs, which Compose never
+# warns about and which would otherwise silently render `http://huly.local:<port>`
+# in production. A ref that cannot be sourced, or whose value is still a local-dev
+# host, aborts the run and names itself.
+#
 # SAFETY: values already present in the existing file win (nothing is clobbered);
 # the candidate is validated by rendering the merged config and refusing to proceed
 # while ANY interpolation still warns as unset; the existing file is backed up
@@ -148,10 +154,25 @@ def live_account_secret():
     return None
 
 
+def tainted(values):
+    """Refs whose resolved value still carries the compose local-dev default host.
+
+    Compose never warns for `${VAR:-default}` refs, so 'no warnings' is NOT a
+    completeness proof: those refs silently render `http://huly.local:<port>`,
+    which is a browser-breaking value in production. They are treated as REQUIRED
+    and their rendered value must not be a local-dev host.
+    """
+    return [r for r in sorted(refs) if values.get(r) and "huly.local" in values[r]]
+
+
+def unresolved(values):
+    return [r for r in sorted(refs) if not values.get(r)]
+
+
 current = existing_values()
 if current:
     warned, merged = unset_refs(current)
-    if not warned and merged.strip():
+    if not warned and merged.strip() and not unresolved(current) and not tainted(current):
         held = current.get("HULY_SHARED_SECRET")
         live_now = live_account_secret()
         if live_now and held and held != live_now:
@@ -190,8 +211,21 @@ if live:
         sys.exit(5)
     values["HULY_SHARED_SECRET"] = live
 
-if missing:
-    print("could not source values for: " + ", ".join(missing), file=sys.stderr)
+local_dev = tainted(values)
+if missing or local_dev:
+    if missing:
+        print("could not source values for: " + ", ".join(missing), file=sys.stderr)
+    if local_dev:
+        print(
+            "these refs would render the compose local-dev default (huly.local) instead of a real value: "
+            + ", ".join(local_dev),
+            file=sys.stderr,
+        )
+        print(
+            "set them from your public domain (see the PUBLIC_URLS table in scripts/generate-prod-config.sh) "
+            "and re-run; nothing has been written.",
+            file=sys.stderr,
+        )
     print("no file written; nothing was changed.", file=sys.stderr)
     sys.exit(6)
 
