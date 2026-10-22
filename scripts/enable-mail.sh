@@ -141,6 +141,33 @@ for svc in $RECREATE; do
   SUMMARY="$SUMMARY $svc(MAIL_URL=$url, SERVER_SECRET: unchanged)"
 done
 
+# --- 4. WHOLE-UNION completeness, ENUMERATED from the compose files. The
+#        per-service guards above cover only the two keys that decide token
+#        validity and mail wiring. Compose does NOT warn for `${VAR:-default}`
+#        refs, so "no warnings" is not a completeness proof -- those refs would
+#        silently render `http://huly.local:<port>` (a browser-breaking value in
+#        production). Every ref is therefore required to be present in the sourced
+#        secrets and must not resolve to a local-dev host.
+REF_LIST="$(grep -hoE '\$\{[A-Za-z_][A-Za-z0-9_]*' docker-compose.yaml docker-compose.override.yaml | sed 's/^\${//' | sort -u)"
+[ -n "$REF_LIST" ] || fail "no interpolation refs found in the compose files -- refusing to run blind."
+UNSET_REFS=""
+LOCAL_REFS=""
+for r in $REF_LIST; do
+  eval "val=\${$r:-}"
+  if [ -z "$val" ]; then
+    UNSET_REFS="$UNSET_REFS $r"
+  elif printf '%s' "$val" | grep -q 'huly\.local'; then
+    LOCAL_REFS="$LOCAL_REFS $r"
+  fi
+  unset val
+done
+if [ -n "$UNSET_REFS" ]; then
+  fail "secrets file is incomplete -- unset for the live layering:$UNSET_REFS. Recreating $RECREATE now would leave empty config. Run scripts/build-secrets-env.sh as root first."
+fi
+if [ -n "$LOCAL_REFS" ]; then
+  fail "secrets would render local-dev hosts (huly.local) for:$LOCAL_REFS. Deploying these would break the browser at the public domain. Set them from your domain before recreating $RECREATE."
+fi
+
 echo "Pre-checks OK: mail running with a credential;$SUMMARY"
 echo "Enabling transactional email -- recreating $RECREATE (signups will now require email confirmation)."
 
