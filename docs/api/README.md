@@ -195,10 +195,13 @@ Set `DOC_MODE` in the front service's environment:
 Keep `off` on public/production domains unless you deliberately want the API
 surface visible; when enabled the routes are still unauthenticated.
 
-> **Rebuild note:** `rush docker:min`'s incremental build does not track the
-> esbuild bundle, so edits to `server/front` routes or the spec may be silently
-> skipped. Use `rush docker:rebuild` when front-route or spec changes are
-> involved.
+> **Rebuild note:** `node common/scripts/install-run-rush.js docker:min`'s
+> incremental build does not track the esbuild bundle, so edits to `server/front`
+> routes or the spec may be silently skipped. Use
+> `node common/scripts/install-run-rush.js docker:rebuild` when front-route or spec
+> changes are involved. Invoke Rush only through the repo's pinned bootstrap: a bare
+> `rush` resolves to GNU rush (`/usr/sbin/rush`) on the production server and is
+> refused — see `scripts/generate-prod-config.sh` next-steps.
 
 ---
 
@@ -210,8 +213,9 @@ Templates for deploying to a public domain (e.g. `wedid.work`):
 - `dev/nginx-wedid.work.conf` — TLS reverse-proxy template
 
 `dev/docker-compose.yaml` interpolates its deployment values from `dev/.env`, which
-Compose loads automatically when it runs from `dev/` (that is what `rush docker:up:min`
-does). `dev/.env` is **gitignored** and must never be committed; the committed artifact
+Compose loads automatically when it runs from `dev/` — that is what the
+`docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate`
+in step 3 below does. `dev/.env` is **gitignored** and must never be committed; the committed artifact
 is `dev/.env.example`. The older `dev/docker-compose.prod-template.yaml` +
 `docker-compose.override.yaml` flow is **retired** — the template file is kept for
 reference only.
