@@ -130,6 +130,24 @@ def existing_values():
     return out
 
 
+def sourced_env(path):
+    r = sh(["bash", "-c", 'set -a; . "$1" >/dev/null 2>&1; set +a; env', "_", path])
+    pairs = {}
+    for line in r.stdout.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            pairs[k] = v
+    return pairs, bool(r.stderr.strip())
+
+
+def source_problems(values, path):
+    """(mismatched keys, had shell errors) when the file is sourced the way every
+    wrapper sources it. An unquoted `|` or `?` silently loses the assignment and
+    executes fragments, so this is checked, not assumed."""
+    got, erred = sourced_env(path)
+    return [k for k in sorted(values) if got.get(k) != values[k]], erred
+
+
 def unset_refs(values):
     """Render the merged config with `values` in the environment; return refs that warn as unset."""
     env = dict(os.environ)
@@ -194,7 +212,15 @@ def unresolved(values):
 current = existing_values()
 if current:
     warned, merged = unset_refs(current)
-    if not warned and merged.strip() and not unresolved(current) and not tainted(current):
+    bad, erred = source_problems(current, secrets_path)
+    if (
+        not warned
+        and merged.strip()
+        and not unresolved(current)
+        and not tainted(current)
+        and not bad
+        and not erred
+    ):
         held = current.get("HULY_SHARED_SECRET")
         live_now = live_account_secret()
         if live_now and held and held != live_now:
@@ -251,10 +277,26 @@ if missing or local_dev:
     print("no file written; nothing was changed.", file=sys.stderr)
     sys.exit(6)
 
+def shell_quote(value):
+    """Single-quote so the file stays shell-sourceable: these values legitimately
+    carry `|`, `?`, `&`, `=` and spaces (STORAGE_CONFIG/QUEUE_CONFIG/URLs), which
+    an unquoted assignment would make the shell try to execute."""
+    return "'" + str(value).replace("'", "'\\''") + "'"
+
+
 with open(candidate, "w", encoding="utf-8") as fh:
     for k in sorted(values):
-        fh.write("%s=%s\n" % (k, values[k]))
+        fh.write("%s=%s\n" % (k, shell_quote(values[k])))
 os.chmod(candidate, 0o600)
+
+bad, erred = source_problems(values, candidate)
+if bad or erred:
+    if bad:
+        print("these keys do not survive shell sourcing of the written file: " + ", ".join(bad), file=sys.stderr)
+    if erred:
+        print("the written file produced shell errors when sourced -- values are not safely quoted", file=sys.stderr)
+    print("no file written; nothing was changed.", file=sys.stderr)
+    sys.exit(9)
 
 warned, merged = unset_refs(values)
 if warned:
