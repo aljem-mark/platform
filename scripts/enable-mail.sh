@@ -150,14 +150,20 @@ done
 #        secrets and must not resolve to a local-dev host.
 REF_LIST="$(grep -hoE '\$\{[A-Za-z_][A-Za-z0-9_]*' docker-compose.yaml docker-compose.override.yaml | sed 's/^\${//' | sort -u)"
 [ -n "$REF_LIST" ] || fail "no interpolation refs found in the compose files -- refusing to run blind."
+# Integrations with no service in this stack are deliberately blank (the prod
+# generator empties exactly these), so they are not required.
+OPTIONAL_REFS=" GMAIL_PUBLIC_URL CALENDAR_PUBLIC_URL TELEGRAM_PUBLIC_URL GITHUB_PUBLIC_URL PAYMENT_PUBLIC_URL POSTHOG_API_KEY POSTHOG_HOST "
 UNSET_REFS=""
 LOCAL_REFS=""
 for r in $REF_LIST; do
   eval "val=\${$r:-}"
   if [ -z "$val" ]; then
-    UNSET_REFS="$UNSET_REFS $r"
+    case "$OPTIONAL_REFS" in *" $r "*) : ;; *) UNSET_REFS="$UNSET_REFS $r" ;; esac
   elif printf '%s' "$val" | grep -q 'huly\.local'; then
-    LOCAL_REFS="$LOCAL_REFS $r"
+    # only browser-facing values must never be a local-dev host: the internal hops
+    # (ACCOUNT_INTERNAL_URL, STREAM_DATALAKE_URL) use huly.local via the compose's
+    # extra_hosts pin and are correct that way on this box.
+    case "$r" in *_PUBLIC_URL) LOCAL_REFS="$LOCAL_REFS $r" ;; esac
   fi
   unset val
 done

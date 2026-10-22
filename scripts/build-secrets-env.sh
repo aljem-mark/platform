@@ -139,7 +139,7 @@ def unset_refs(values):
         print("docker compose config failed:", (r.stderr or "").strip()[:400], file=sys.stderr)
         sys.exit(3)
     names = set(re.findall(r'The "([A-Za-z_][A-Za-z0-9_]*)" variable is not set', r.stderr))
-    return names, r.stdout
+    return {n for n in names if n not in OPTIONAL_REFS}, r.stdout
 
 
 refs, mapping = refs_and_mapping()
@@ -154,6 +154,20 @@ def live_account_secret():
     return None
 
 
+# Refs whose canonical value in this stack is deliberately BLANK: integrations
+# with no service deployed (the prod generator empties exactly these) and the
+# analytics keys. They must not be required, or a correct stack aborts.
+OPTIONAL_REFS = {
+    "GMAIL_PUBLIC_URL",
+    "CALENDAR_PUBLIC_URL",
+    "TELEGRAM_PUBLIC_URL",
+    "GITHUB_PUBLIC_URL",
+    "PAYMENT_PUBLIC_URL",
+    "POSTHOG_API_KEY",
+    "POSTHOG_HOST",
+}
+
+
 def tainted(values):
     """Refs whose resolved value still carries the compose local-dev default host.
 
@@ -162,11 +176,19 @@ def tainted(values):
     which is a browser-breaking value in production. They are treated as REQUIRED
     and their rendered value must not be a local-dev host.
     """
-    return [r for r in sorted(refs) if values.get(r) and "huly.local" in values[r]]
+    # Only BROWSER-FACING values must never be a local-dev host. The internal hops
+    # (ACCOUNT_INTERNAL_URL, STREAM_DATALAKE_URL) legitimately use huly.local on this
+    # box: the compose pins `extra_hosts: huly.local:host-gateway` for them, and the
+    # live stack runs that way today.
+    return [
+        r
+        for r in sorted(refs)
+        if r.endswith("_PUBLIC_URL") and values.get(r) and "huly.local" in values[r]
+    ]
 
 
 def unresolved(values):
-    return [r for r in sorted(refs) if not values.get(r)]
+    return [r for r in sorted(refs) if r not in OPTIONAL_REFS and not values.get(r)]
 
 
 current = existing_values()
@@ -197,7 +219,7 @@ for ref in sorted(refs):
             break
     if got:
         values[ref] = got
-    else:
+    elif ref not in OPTIONAL_REFS:
         missing.append(ref)
 
 live = live_account_secret()
