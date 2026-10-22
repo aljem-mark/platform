@@ -141,6 +141,26 @@ for svc in $RECREATE; do
   SUMMARY="$SUMMARY $svc(MAIL_URL=$url, SERVER_SECRET: unchanged)"
 done
 
+# --- 4. WHOLE-UNION completeness. The per-service guards above cover only the two
+#        keys that decide token validity and mail wiring; an incomplete secrets file
+#        would still recreate these services with empty DB / storage / queue config.
+#        Every ${...} interpolation in the live layering must resolve -- and Compose
+#        warns on stderr for each unset one, so "no warnings" against the MERGED
+#        render is the proof, not a hand-maintained key list.
+set +e
+WARN_OUT="$(docker compose -f docker-compose.yaml -f docker-compose.override.yaml config --format json 2>&1 >/dev/null)"
+CFG_RC=$?
+set -e
+if [ "$CFG_RC" != "0" ]; then
+  fail "'docker compose config' failed -- cannot verify that every interpolation resolves."
+fi
+UNRESOLVED="$(printf '%s\n' "$WARN_OUT" \
+  | grep -oE 'The "[A-Za-z_][A-Za-z0-9_]*" variable is not set' \
+  | sed -e 's/^The "//' -e 's/" variable is not set$//' | sort -u || true)"
+if [ -n "$UNRESOLVED" ]; then
+  fail "secrets file is incomplete -- the live layering still has unset interpolations: $(printf '%s' "$UNRESOLVED" | tr '\n' ' '). Recreating $RECREATE now would leave empty DB/storage/queue config. Run scripts/build-secrets-env.sh as root first."
+fi
+
 echo "Pre-checks OK: mail running with a credential;$SUMMARY"
 echo "Enabling transactional email -- recreating $RECREATE (signups will now require email confirmation)."
 
