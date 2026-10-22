@@ -85,6 +85,13 @@ docker compose -f docker-compose.yaml -f docker-compose.override.yaml exec -T ma
 #        An empty SERVER_SECRET slipping through would recreate a token-verifying
 #        service with no signing secret and kill every session, so this guard must
 #        never false-negative: hence a structured parse, not YAML pattern matching.
+#        The non-empty value is then compared with what the RUNNING container
+#        actually holds: SERVER_SECRET interpolates ${HULY_SHARED_SECRET} from
+#        /etc/wedidwork/secrets.env, so an edit or a
+#        `generate-prod-config.sh --rotate-secret` would otherwise be applied to
+#        these two services while the other token services keep the old value.
+#        A rotation aborts the run -- "never rotate it" is an enforced invariant,
+#        not a note. Neither value is ever echoed.
 command -v python3 >/dev/null 2>&1 \
   || fail "python3 is required for the merged-config guard -- refusing to run without it."
 
@@ -107,16 +114,31 @@ sys.stdout.write("" if val is None else str(val))
 
 SUMMARY=""
 for svc in $RECREATE; do
+  # the service must be live: the rotation guard below needs a value to compare against
+  printf '%s\n' "$RUNNING" | grep -qx "$svc" \
+    || fail "$svc is not running -- refusing to recreate it (there would be no live signing secret to compare against)."
+
   url="$(svc_env "$svc" MAIL_URL)"
   if [ -z "$url" ]; then
     fail "merged config has an EMPTY $svc MAIL_URL -- email would stay off. Check docker-compose.yaml (base) and dev/docker-compose.override.yaml for a conflicting MAIL_URL= entry."
   fi
-  secret="$(svc_env "$svc" SERVER_SECRET)"
-  if [ -z "$secret" ]; then
+
+  new_secret="$(svc_env "$svc" SERVER_SECRET)"
+  if [ -z "$new_secret" ]; then
     fail "merged config has an EMPTY $svc SERVER_SECRET -- recreating $svc now would break token verification for every session."
   fi
-  unset secret
-  SUMMARY="$SUMMARY $svc(MAIL_URL=$url, SERVER_SECRET: present)"
+
+  # NEVER ROTATE the signing secret: compare the value the recreate WOULD apply
+  # against the one the running container actually holds. Both stay in shell
+  # variables and are never echoed.
+  live_secret="$(docker compose -f docker-compose.yaml -f docker-compose.override.yaml exec -T "$svc" printenv SERVER_SECRET)" \
+    || fail "could not read the running $svc SERVER_SECRET -- refusing to recreate without the rotation check."
+  if [ "$new_secret" != "$live_secret" ]; then
+    fail "$svc: the merged SERVER_SECRET differs from the running one -- recreating now would rotate the signing secret and log every user out. Fix the value in /etc/wedidwork/secrets.env first (never rotate it)."
+  fi
+  unset new_secret live_secret
+
+  SUMMARY="$SUMMARY $svc(MAIL_URL=$url, SERVER_SECRET: unchanged)"
 done
 
 echo "Pre-checks OK: mail running with a credential;$SUMMARY"
