@@ -125,12 +125,48 @@ EXISTING_SECRET=""
 if [[ -f "$OUTPUT" ]]; then
   EXISTING_SECRET="$(grep -E '^HULY_SHARED_SECRET=' "$OUTPUT" | head -1 | cut -d= -f2- || true)"
 fi
-if [[ "$ROTATE_SECRET" == true || -z "$EXISTING_SECRET" || "$EXISTING_SECRET" == REPLACE_ME_* ]]; then
+# An unfilled template placeholder is not a secret; treat it as absent.
+if [[ "$EXISTING_SECRET" == REPLACE_ME_* ]]; then
+  EXISTING_SECRET=""
+fi
+
+# ── NEVER-BLANK-SECRET INVARIANT (hard-fail, not prose) ─────────────────────
+# HULY_SHARED_SECRET signs tokens for seven services. If the file we are about to
+# regenerate has no usable secret but a previous copy (${OUTPUT}.bak, written by
+# the run that produced the current file) does, then this run would MINT A NEW
+# secret and silently ROTATE the signing key: every session and API token dies,
+# and workspace-select fails with a crypto/decrypt error on the next deploy.
+# That is a deliberate, destructive act, so it must be requested explicitly.
+# Refuse here and name the two safe remedies; nothing is written.
+if [[ "$ROTATE_SECRET" != true && -z "$EXISTING_SECRET" && -f "${OUTPUT}.bak" ]]; then
+  PRIOR_SECRET="$(grep -E '^HULY_SHARED_SECRET=' "${OUTPUT}.bak" | head -1 | cut -d= -f2- || true)"
+  if [[ -n "$PRIOR_SECRET" && "$PRIOR_SECRET" != REPLACE_ME_* ]]; then
+    echo "Error: ${OUTPUT} has no usable HULY_SHARED_SECRET, but ${OUTPUT}.bak holds one." >&2
+    echo "       Continuing would silently ROTATE the signing secret: all sessions and" >&2
+    echo "       API tokens would be invalidated. Refusing to write anything." >&2
+    echo "       Safe remedies:" >&2
+    echo "         * restore the secret into ${OUTPUT} (reuse the value from ${OUTPUT}.bak), or" >&2
+    echo "         * re-run with --rotate-secret to rotate the key deliberately." >&2
+    exit 1
+  fi
+fi
+
+if [[ "$ROTATE_SECRET" == true || -z "$EXISTING_SECRET" ]]; then
+  command -v openssl >/dev/null 2>&1 \
+    || { echo "Error: openssl is required to mint HULY_SHARED_SECRET." >&2; exit 1; }
   SHARED_SECRET="$(openssl rand -hex 32)"
   SHARED_SECRET_NOTE="newly generated"
 else
   SHARED_SECRET="$EXISTING_SECRET"
   SHARED_SECRET_NOTE="reusing the existing value (--rotate-secret to change it)"
+fi
+
+# Hard-fail if the resolved secret is blank or malformed: a stack whose token
+# services cannot verify each other's signatures is worse than no deploy.
+if [[ ! "$SHARED_SECRET" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Error: HULY_SHARED_SECRET did not resolve to a 64-char hex value (blank or malformed)." >&2
+  echo "       Refusing to write ${OUTPUT}: token verification would fail across all services." >&2
+  exit 1
 fi
 
 # The mail (pod-mail) SMTP password: user-supplied and NEVER generated. Only the
