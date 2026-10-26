@@ -4,7 +4,8 @@
 
 One script for both environments. It checks the config before recreating anything
 (one shared token secret, single-URL values, no `huly.local` on the server, secret not
-changed by accident), recreates the stack, then runs a health check. It never prints
+changed by accident), recreates the stack, then runs a health check (restarts, shared
+secret, transactor URLs, and mail: `MAIL_URL`, mail password, SMTP login). It never prints
 secrets and does not build images (run `rush docker:build` first).
 
 ```bash
@@ -22,6 +23,7 @@ bash scripts/deploy.sh --local              # local: dev/.env (created with --lo
 | `--rotate-secret` | Deliberately change `HULY_SHARED_SECRET` (logs everyone out, voids API tokens) |
 | `--check` | Only run the health check on the running stack |
 | `--dry-run` | Run the pre-checks and show the compose command; change nothing |
+| `--skip-smtp` | Skip the SMTP login test (the health check otherwise runs `smtp-auth-check.py` for you) |
 | `--wait <s>` | Seconds to wait before the health check (default 45) |
 
 ## Configuration (`dev/.env`)

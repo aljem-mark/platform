@@ -21,6 +21,9 @@
 #                          voids API tokens). Without it a changed secret aborts.
 #   --check                only run the health check on the running stack
 #   --dry-run              run the pre-checks and print the compose command; change nothing
+#   --skip-smtp            skip the SMTP login test in the health check (it is run
+#                          automatically: scripts/smtp-auth-check.py against the
+#                          mail container, so you never have to run it by hand)
 #   --wait <seconds>       how long to watch containers after the recreate (default 45)
 #   -h | --help            show this help
 #
@@ -34,7 +37,8 @@
 #     stack runs). --min adds docker-compose.min.yaml for a minimal stack.
 #   * Email: a full recreate also wires account + workspace to the mail relay
 #     (MAIL_URL is in the base compose), so signups require email confirmation.
-#     It warns when PLUNK_SMTP_PASSWORD is empty.
+#     The health check confirms MAIL_URL, the mail password, and that the relay
+#     accepts the password (SMTP login test).
 
 set -euo pipefail
 
@@ -51,6 +55,7 @@ FIX_OVERRIDE=false
 ROTATE=false
 CHECK_ONLY=false
 DRY_RUN=false
+SKIP_SMTP=false
 WAIT=45
 
 SECRET_KEYS='SECRET|SERVER_SECRET|STREAM_SERVER_SECRET|HULY_TOKEN_SECRET'
@@ -73,6 +78,7 @@ while [[ $# -gt 0 ]]; do
     --rotate-secret) ROTATE=true; shift ;;
     --check) CHECK_ONLY=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --skip-smtp) SKIP_SMTP=true; shift ;;
     --wait) WAIT="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -174,6 +180,8 @@ health_check() {
   done
   if [[ "$bad" == 0 ]]; then echo "  OK: every TRANSACTOR_URL is internal;public"; else problems=$((problems + 1)); fi
 
+  mail_check || problems=$((problems + $?))
+
   echo
   if [[ "$problems" -eq 0 ]]; then
     echo "Health check passed."
@@ -181,6 +189,63 @@ health_check() {
     echo "Health check found $problems problem(s) -- see above."
     return 1
   fi
+}
+
+# Mail: relay running with a password, account/workspace wired to it, and the
+# password actually accepted by the provider (scripts/smtp-auth-check.py --
+# pod-mail answers 200 even when a send fails, so only an SMTP login proves the
+# key works). Returns the number of problems found.
+mail_check() {
+  step "Mail"
+  local found=0 mid svc sid url
+  mid="$(compose ps -q mail 2>/dev/null | head -1)"
+  if [[ -z "$mid" ]]; then
+    echo "  mail container not running -- skipped"
+    return 0
+  fi
+
+  for svc in account workspace_cockroach; do
+    sid="$(compose ps -q "$svc" 2>/dev/null | head -1)"
+    [[ -n "$sid" ]] || continue
+    url="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$sid" | grep -E '^MAIL_URL=' | cut -d= -f2- || true)"
+    if [[ -z "$url" || "$url" == "''" ]]; then
+      warn "$svc has no MAIL_URL -- it will not send signup / reset-password email."
+      found=$((found + 1))
+    else
+      echo "  OK: $svc MAIL_URL=$url"
+    fi
+  done
+
+  if ! docker exec "$mid" sh -c 'test -n "$SMTP_PASSWORD"' 2>/dev/null; then
+    if [[ "$MODE" == server ]]; then
+      warn "mail container has an EMPTY SMTP password -- set PLUNK_SMTP_PASSWORD in $SERVER_SECRETS."
+      found=$((found + 1))
+    else
+      echo "  mail password empty (fine locally: mail stays off) -- SMTP login test skipped"
+    fi
+    return "$found"
+  fi
+  echo "  OK: mail container has an SMTP password"
+
+  if [[ "$SKIP_SMTP" == true ]]; then
+    echo "  SMTP login test skipped (--skip-smtp)"
+    return "$found"
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 not found -- SMTP login test skipped."
+    return "$found"
+  fi
+  local out rc=0
+  out="$(python3 "$REPO/scripts/smtp-auth-check.py" --container "$mid" 2>&1)" || rc=$?
+  case "$rc" in
+    0) echo "  OK: SMTP login accepted by the relay (password works)" ;;
+    1) warn "SMTP login REJECTED -- the mail password or relay endpoint is wrong; no email will arrive."
+       printf '%s\n' "$out" | sed 's/^/      /'
+       found=$((found + 1)) ;;
+    *) warn "could not run the SMTP login test (network or relay down?) -- not counted as a failure."
+       printf '%s\n' "$out" | tail -3 | sed 's/^/      /' ;;
+  esac
+  return "$found"
 }
 
 # ── pre-checks ──────────────────────────────────────────────────────────────
