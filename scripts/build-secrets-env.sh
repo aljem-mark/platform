@@ -72,8 +72,34 @@ def sh(args, **kw):
     return subprocess.run(args, capture_output=True, text=True, **kw)
 
 
+REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::?-[^}]*)?\}")
+
+
+def template_regex(template):
+    """Turn a compose value template into a regex with one group per ${REF}.
+
+    A container only holds the RENDERED value, e.g. `TRANSACTOR_URL=${A};${B}` ends
+    up as `ws://internal;wss://public`. Copying that whole string into A is what
+    produced the doubled TRANSACTOR_URL. Each ref therefore matches only its own
+    segment (no `;`, the list separator), and the whole value must match the
+    template exactly, so a value that is already doubled is rejected, not copied.
+    """
+    parts, pos, seen = ["^"], 0, set()
+    for m in REF_RE.finditer(template):
+        parts.append(re.escape(template[pos:m.start()]))
+        ref = m.group(1)
+        if ref in seen:
+            parts.append("(?P=%s)" % ref)
+        else:
+            parts.append("(?P<%s>[^;]*?)" % ref)
+            seen.add(ref)
+        pos = m.end()
+    parts.append(re.escape(template[pos:]) + "$")
+    return re.compile("".join(parts))
+
+
 def refs_and_mapping():
-    """Union of ${REF} names from both compose files, each with candidate (service, var)."""
+    """Union of ${REF} names from both compose files, each with candidate (service, var, template)."""
     refs, mapping = set(), {}
     for name in ("docker-compose.yaml", "docker-compose.override.yaml"):
         path = os.path.join(dev, name)
@@ -85,16 +111,28 @@ def refs_and_mapping():
             if m:
                 service = m.group(1)
                 continue
-            for ref in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)", line):
+            if line.lstrip().startswith("#"):
+                continue
+            kv = re.match(r"^\s*-?\s*([A-Za-z_][A-Za-z0-9_]*)=(.*?)\s*(?:\s#.*)?$", line)
+            var, template = (kv.group(1), kv.group(2).strip("\"'")) if kv else (None, None)
+            for ref in REF_RE.findall(line):
                 refs.add(ref)
-                var = re.search(
-                    r"(?:-\s*)?([A-Za-z_][A-Za-z0-9_]*)=(?:\"|')?[^\"']*?\$\{" + re.escape(ref), line
-                )
-                cand = (service, var.group(1) if var else None)
+                cand = (service, var, template)
                 buckets = mapping.setdefault(ref, [])
                 if cand not in buckets:
                     buckets.append(cand)
     return refs, mapping
+
+
+def extract_ref(ref, live_value, template):
+    """The part of a rendered container value that belongs to `ref`, or None."""
+    if live_value is None or template is None:
+        return None
+    m = template_regex(template).match(live_value)
+    if not m:
+        return None
+    got = m.group(ref)
+    return got or None
 
 
 def container_id(service):
@@ -166,9 +204,9 @@ if not refs:
     sys.exit(4)
 
 def live_account_secret():
-    for service, var in mapping.get("HULY_SHARED_SECRET", []):
+    for service, var, template in mapping.get("HULY_SHARED_SECRET", []):
         if service == "account":
-            return read_var(service, var)
+            return extract_ref("HULY_SHARED_SECRET", read_var(service, var), template)
     return None
 
 
@@ -209,6 +247,18 @@ def unresolved(values):
     return [r for r in sorted(refs) if r not in OPTIONAL_REFS and not values.get(r)]
 
 
+def malformed(values):
+    """URL refs that hold more than one URL.
+
+    Each *_URL ref is ONE address; the compose joins them with `;` itself
+    (TRANSACTOR_URL=${TRANSACTOR_INTERNAL_URL};${TRANSACTOR_PUBLIC_URL}). A `;` inside
+    the ref doubles the list, and the account service then reads the third segment
+    as the transactor REGION, finds no transactor, and fails workspace selection
+    with a 500.
+    """
+    return [k for k in sorted(values) if k.endswith("_URL") and ";" in (values.get(k) or "")]
+
+
 current = existing_values()
 if current:
     warned, merged = unset_refs(current)
@@ -218,6 +268,7 @@ if current:
         and merged.strip()
         and not unresolved(current)
         and not tainted(current)
+        and not malformed(current)
         and not bad
         and not erred
     ):
@@ -233,16 +284,28 @@ if current:
         print("secrets.env already resolves every interpolation (%d refs) -- no change made." % len(refs))
         sys.exit(10)
 
-values = {k: v for k, v in current.items() if v}
+dropped = malformed(current)
+if dropped:
+    print(
+        "existing secrets.env holds a multi-URL value for: " + ", ".join(dropped)
+        + " -- re-deriving it from the live containers.",
+        file=sys.stderr,
+    )
+values = {k: v for k, v in current.items() if v and k not in dropped}
 missing = []
 for ref in sorted(refs):
     if values.get(ref):
         continue
     got = None
-    for service, var in mapping.get(ref, []):
-        got = read_var(service, var)
-        if got:
+    for service, var, template in mapping.get(ref, []):
+        # The signing secret comes from account ONLY: other containers may still
+        # run with a divergent value, and copying one of those would rotate it.
+        if ref == "HULY_SHARED_SECRET" and service != "account":
+            continue
+        got = extract_ref(ref, read_var(service, var), template)
+        if got and not malformed({ref: got}):
             break
+        got = None
     if got:
         values[ref] = got
     elif ref not in OPTIONAL_REFS:

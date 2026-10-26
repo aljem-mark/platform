@@ -15,10 +15,12 @@
 #      in this directory pattern, and must never be committed with real values.
 #   2. Replace every REPLACE_ME_* with a real value:
 #        openssl rand -hex 32
-#   3. SERVER_SECRET: generate ONE value and use the SAME string on all seven
-#      token-verifying services below (account, stats, workspace_cockroach,
-#      front, transactor_cockroach, fulltext_cockroach, rating_cockroach).
-#      A mismatch invalidates token verification and logs everyone out / 401s.
+#   3. Token secrets: do NOT set any here. Every token-checking service in
+#      docker-compose.yaml (SERVER_SECRET / SECRET / STREAM_SERVER_SECRET /
+#      HULY_TOKEN_SECRET) reads the ONE value ${HULY_SHARED_SECRET} from the
+#      deployment environment (/etc/wedidwork/secrets.env). A token minted by
+#      account is checked by datalake, collaborator, etc. with that same key, so a
+#      per-service value breaks file access and workspace loading (500 / 401).
 #   4. Bring the stack up (Compose merges per-key; no !override tags here):
 #        docker compose -f docker-compose.yaml -f docker-compose.min.yaml up -d --force-recreate
 #   5. Verify:
@@ -39,7 +41,6 @@ services:
   # ---- Browser-facing config for the front service (delivered via /config.json) ----
   front:
     environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
       - DOC_MODE=safe
       - ACCOUNTS_URL=https://REPLACE_ME_DOMAIN/accounts
       - COLLABORATOR_URL=wss://REPLACE_ME_DOMAIN/collaborator
@@ -83,48 +84,7 @@ services:
       # which this stack runs.
       - DISABLED_FEATURES=auto-translate,mailboxes,calendar,telegram
 
-  # ---- Shared token-signing secret: SAME value on all seven services ----
-  account:
-    environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
-  stats:
-    environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
-  workspace_cockroach:
-    environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
-  transactor_cockroach:
-    environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
-  fulltext_cockroach:
-    environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
-  rating_cockroach:
-    environment:
-      - SERVER_SECRET=REPLACE_ME_SERVER_SECRET
-
-  # ---- Service-local secrets: independent values ----
-  collaborator:
-    environment:
-      - SECRET=REPLACE_ME_COLLABORATOR_SECRET
-  stream:
-    environment:
-      - STREAM_SERVER_SECRET=REPLACE_ME_STREAM_SERVER_SECRET
-  media:
-    environment:
-      - SECRET=REPLACE_ME_MEDIA_SECRET
-  analytics:
-    environment:
-      - SECRET=REPLACE_ME_ANALYTICS_SECRET
-  export:
-    environment:
-      - SECRET=REPLACE_ME_EXPORT_SECRET
-  datalake:
-    environment:
-      - SECRET=REPLACE_ME_DATALAKE_SECRET
-  hulylake:
-    environment:
-      - HULY_TOKEN_SECRET=REPLACE_ME_HULY_TOKEN_SECRET
-  events-processor:
-    environment:
-      - SECRET=REPLACE_ME_EVENTS_PROCESSOR_SECRET
+  # ---- Token secrets: intentionally NOT overridden ----
+  # docker-compose.yaml already sets every SERVER_SECRET / SECRET /
+  # STREAM_SERVER_SECRET / HULY_TOKEN_SECRET to ${HULY_SHARED_SECRET}. Adding a
+  # literal value for any service here splits the key and breaks workspace access.
