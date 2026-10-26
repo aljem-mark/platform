@@ -14,15 +14,18 @@
 # DB_CR_URL even though the container ends up holding DB_URL.
 #
 # NEVER ROTATES THE SIGNING SECRET: HULY_SHARED_SECRET is copied verbatim from
-# dev-account-1's SERVER_SECRET (the 64-char value -- NOT rating_cockroach's
-# divergent short one, which needs its own reconcile). If the existing file holds a
-# different value the run aborts rather than rotating it.
+# the account container only -- never from another service, which may still run an
+# old divergent value. Every token-checking service in the compose reads this one
+# value. If the existing file holds a different value the run aborts rather than
+# rotating it.
 #
 # COMPLETENESS IS ENUMERATED, NOT INFERRED FROM WARNINGS: every ${REF} in either
 # compose file is required -- including `${VAR:-default}` refs, which Compose never
 # warns about and which would otherwise silently render `http://huly.local:<port>`
-# in production. A ref that cannot be sourced, or whose value is still a local-dev
-# host, aborts the run and names itself.
+# in production. No value may be a local-dev host (huly.local), internal ones
+# included. Doubled `;` URL values and huly.local values are re-derived from a
+# container that holds a correct one; a ref that still cannot be sourced aborts the
+# run and names itself.
 #
 # SAFETY: values already present in the existing file win (nothing is clobbered);
 # the candidate is validated by rendering the merged config and refusing to proceed
@@ -224,23 +227,23 @@ OPTIONAL_REFS = {
 }
 
 
+def is_local_dev(value):
+    return "huly.local" in (value or "")
+
+
 def tainted(values):
-    """Refs whose resolved value still carries the compose local-dev default host.
+    """Refs whose resolved value still carries the local-dev host huly.local.
 
     Compose never warns for `${VAR:-default}` refs, so 'no warnings' is NOT a
-    completeness proof: those refs silently render `http://huly.local:<port>`,
-    which is a browser-breaking value in production. They are treated as REQUIRED
-    and their rendered value must not be a local-dev host.
+    completeness proof: those refs silently render `http://huly.local:<port>`.
+    No value may be a local-dev host on the server -- browser-facing OR internal.
+    Internal hops must use compose service names (http://account:3000): a
+    huly.local hop goes out through host-gateway and back in on the published
+    port, which the server's firewall blocks -- with
+    ACCOUNT_INTERNAL_URL=http://huly.local:3000, datalake could not reach account
+    and crash-looped ("Accounts service not ready").
     """
-    # Only BROWSER-FACING values must never be a local-dev host. The internal hops
-    # (ACCOUNT_INTERNAL_URL, STREAM_DATALAKE_URL) legitimately use huly.local on this
-    # box: the compose pins `extra_hosts: huly.local:host-gateway` for them, and the
-    # live stack runs that way today.
-    return [
-        r
-        for r in sorted(refs)
-        if r.endswith("_PUBLIC_URL") and values.get(r) and "huly.local" in values[r]
-    ]
+    return [r for r in sorted(refs) if values.get(r) and is_local_dev(values[r])]
 
 
 def unresolved(values):
@@ -284,10 +287,10 @@ if current:
         print("secrets.env already resolves every interpolation (%d refs) -- no change made." % len(refs))
         sys.exit(10)
 
-dropped = malformed(current)
+dropped = sorted(set(malformed(current)) | set(tainted(current)))
 if dropped:
     print(
-        "existing secrets.env holds a multi-URL value for: " + ", ".join(dropped)
+        "existing secrets.env holds a multi-URL or huly.local value for: " + ", ".join(dropped)
         + " -- re-deriving it from the live containers.",
         file=sys.stderr,
     )
@@ -303,7 +306,9 @@ for ref in sorted(refs):
         if ref == "HULY_SHARED_SECRET" and service != "account":
             continue
         got = extract_ref(ref, read_var(service, var), template)
-        if got and not malformed({ref: got}):
+        # A container still running a doubled or huly.local value is skipped, so
+        # a correct value from another container wins instead of the stale one.
+        if got and not malformed({ref: got}) and not is_local_dev(got):
             break
         got = None
     if got:
@@ -328,13 +333,15 @@ if missing or local_dev:
         print("could not source values for: " + ", ".join(missing), file=sys.stderr)
     if local_dev:
         print(
-            "these refs would render the compose local-dev default (huly.local) instead of a real value: "
+            "these refs would render the local-dev host (huly.local) instead of a real value: "
             + ", ".join(local_dev),
             file=sys.stderr,
         )
         print(
-            "set them from your public domain (see the PUBLIC_URLS table in scripts/generate-prod-config.sh) "
-            "and re-run; nothing has been written.",
+            "set *_PUBLIC_URL keys from your public domain (see the PUBLIC_URLS table in "
+            "scripts/generate-prod-config.sh) and internal keys to compose service names "
+            "(e.g. ACCOUNT_INTERNAL_URL=http://account:3000, see dev/.env.example), "
+            "then re-run; nothing has been written.",
             file=sys.stderr,
         )
     print("no file written; nothing was changed.", file=sys.stderr)

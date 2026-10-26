@@ -20,10 +20,13 @@
 # (docker-compose.yaml + docker-compose.override.yaml). Do NOT switch this to
 # docker-compose.min.yaml: mail itself is defined in the base file only, but a
 # later stack-wide `up` under a different file set would drop the override's
-# hardcoded SERVER_SECRET / *_URL values for the other services.
+# *_URL values for the other services. (Token secrets are no longer in the
+# override: every service reads ${HULY_SHARED_SECRET} from the base compose.)
 #
 # `--no-deps` plus naming the service means no neighbour container is created,
-# started or recreated, so the override's secrets are never re-applied.
+# started or recreated. A full-stack `up --force-recreate` under this layering
+# also (re)creates mail with PLUNK_SMTP_PASSWORD, so this script is only needed
+# to apply a new mail credential without touching the rest of the stack.
 #
 # PRE-BUILD BASELINE and ROLLBACK ANCHOR -- capture this BEFORE building
 # anything; it is the state the stack-level rollback below restores. Run as
@@ -55,6 +58,13 @@
 # STACK-LEVEL ROLLBACK -- pairs with the baseline above. This is the
 # compose/stack rollback; the mail-image rollback is the separate block below.
 #
+#   WARNING: the anchor predates the shared-secret fix (8c16e287a). Its
+#   dev/docker-compose.yaml still has `SECRET=secret` on datalake, collaborator,
+#   media, export, etc., which splits token verification from account and brings
+#   back the workspace 500. After reverting, set every SECRET= /
+#   STREAM_SERVER_SECRET= line back to ${HULY_SHARED_SECRET} before any recreate
+#   of those services -- or revert only the mail/MAIL_URL lines instead.
+#
 #   a) compose-only revert, as rhinax:
 #        cd ~/projects/we-did-work
 #        git checkout "$ANCHOR" -- dev/docker-compose.yaml
@@ -80,10 +90,11 @@
 #   1. LAYERING. The recreate uses `-f docker-compose.yaml -f
 #      docker-compose.override.yaml`, matching what is actually live. The
 #      pre-Plunk plan recreated these services under
-#      `-f docker-compose.min.yaml`, which drops the override -- and with it the
-#      SERVER_SECRET the live override supplies to the token-verifying services
-#      (confirmed on the server), so token verification breaks and every session
-#      dies. The min layering is only correct for a stack started on min.
+#      `-f docker-compose.min.yaml`, which drops the override and every value it
+#      supplies. (The override used to hold per-service SERVER_SECRET values; those
+#      are gone -- the base compose gives every service ${HULY_SHARED_SECRET} -- but
+#      a mixed layering still recreates services with config their neighbours do
+#      not share.) The min layering is only correct for a stack started on min.
 #   2. SECRET SOURCING. The same plan ran `set -a; . /etc/wedidwork/secrets.env`
 #      as `rhinax`, where /etc/wedidwork is 750 root:root: the source silently
 #      no-ops, leaving DB_CR_URL / QUEUE_CONFIG / STORAGE_CONFIG /

@@ -28,11 +28,15 @@
 #   sudo visudo -cf /etc/sudoers.d/wedidwork-enable-mail
 # Re-run the `install` line after any `git pull` that changes this file.
 #
+# NOT NEEDED AFTER A FULL RECREATE: MAIL_URL lives in the base compose, so any
+# full-stack `up --force-recreate` under this layering already wires mail into
+# account + workspace. This script is only for switching mail on WITHOUT
+# recreating the rest of the stack.
+#
 # COMPOSE LAYERING: pinned to what the live stack actually runs
-# (docker-compose.yaml + docker-compose.override.yaml). Do NOT switch this to
-# docker-compose.min.yaml: that drops the override, and with it the SERVER_SECRET
-# the live override supplies -- recreating these services under min would break
-# token verification for every session.
+# (docker-compose.yaml + docker-compose.override.yaml), so the recreated services
+# get the same merged config as their neighbours. Token secrets are NOT in the
+# override: every service reads ${HULY_SHARED_SECRET} from the base compose.
 #
 # ROLLBACK: the stack-level rollback documented in scripts/apply-mail.sh
 # (pre-build baseline + `git checkout "$ANCHOR" -- dev/docker-compose.yaml` +
@@ -79,7 +83,7 @@ docker compose -f docker-compose.yaml -f docker-compose.override.yaml exec -T ma
 
 # --- 3. merged-config pre-checks, parsed as JSON, for EVERY service about to be
 #        recreated. Compose merges `environment` key-by-key (list form included),
-#        so the base MAIL_URL survives the override's `- SERVER_SECRET`; a FUTURE
+#        so the base MAIL_URL survives any other override entries; a FUTURE
 #        override edit -- the override is rhinax-writable -- adding a conflicting
 #        MAIL_URL would silently undo that, so assert the merge per service.
 #        An empty SERVER_SECRET slipping through would recreate a token-verifying
@@ -145,9 +149,12 @@ done
 #        per-service guards above cover only the two keys that decide token
 #        validity and mail wiring. Compose does NOT warn for `${VAR:-default}`
 #        refs, so "no warnings" is not a completeness proof -- those refs would
-#        silently render `http://huly.local:<port>` (a browser-breaking value in
-#        production). Every ref is therefore required to be present in the sourced
-#        secrets and must not resolve to a local-dev host.
+#        silently render `http://huly.local:<port>`. Every ref is therefore
+#        required to be present in the sourced secrets and must not resolve to a
+#        local-dev host -- browser-facing AND internal. An internal huly.local hop
+#        goes out through host-gateway and back in on the published port, which the
+#        server's firewall blocks: with ACCOUNT_INTERNAL_URL=http://huly.local:3000,
+#        datalake could not reach account and crash-looped.
 REF_LIST="$(grep -hoE '\$\{[A-Za-z_][A-Za-z0-9_]*' docker-compose.yaml docker-compose.override.yaml | sed 's/^\${//' | sort -u)"
 [ -n "$REF_LIST" ] || fail "no interpolation refs found in the compose files -- refusing to run blind."
 # Integrations with no service in this stack are deliberately blank (the prod
@@ -160,10 +167,7 @@ for r in $REF_LIST; do
   if [ -z "$val" ]; then
     case "$OPTIONAL_REFS" in *" $r "*) : ;; *) UNSET_REFS="$UNSET_REFS $r" ;; esac
   elif printf '%s' "$val" | grep -q 'huly\.local'; then
-    # only browser-facing values must never be a local-dev host: the internal hops
-    # (ACCOUNT_INTERNAL_URL, STREAM_DATALAKE_URL) use huly.local via the compose's
-    # extra_hosts pin and are correct that way on this box.
-    case "$r" in *_PUBLIC_URL) LOCAL_REFS="$LOCAL_REFS $r" ;; esac
+    LOCAL_REFS="$LOCAL_REFS $r"
   fi
   unset val
 done
@@ -171,7 +175,7 @@ if [ -n "$UNSET_REFS" ]; then
   fail "secrets file is incomplete -- unset for the live layering:$UNSET_REFS. Recreating $RECREATE now would leave empty config. Run scripts/build-secrets-env.sh as root first."
 fi
 if [ -n "$LOCAL_REFS" ]; then
-  fail "secrets would render local-dev hosts (huly.local) for:$LOCAL_REFS. Deploying these would break the browser at the public domain. Set them from your domain before recreating $RECREATE."
+  fail "secrets would render local-dev hosts (huly.local) for:$LOCAL_REFS. Set *_PUBLIC_URL keys from your public domain and internal keys to compose service names (e.g. ACCOUNT_INTERNAL_URL=http://account:3000) in /etc/wedidwork/secrets.env before recreating $RECREATE."
 fi
 
 echo "Pre-checks OK: mail running with a credential;$SUMMARY"
